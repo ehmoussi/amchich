@@ -1,18 +1,23 @@
 import { MoreHorizontal, Pencil, Trash } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../ui/dropdown-menu";
 import { SidebarMenuAction, SidebarMenuButton, SidebarMenuItem } from "../ui/sidebar";
-import { deleteConversation, updateConversationTitle, type ConversationMeta } from "../../lib/db";
+import { type ConversationID, deleteConversation, updateConversationTitle, type ConversationMeta } from "../../lib/db";
 import React from "react";
 import { Input } from "../ui/input";
 import { toast } from "sonner";
+import { Link, useNavigate, useParams } from "react-router";
 
 const CONVERSATION_TITLE_MAX_LENGTH = 100;
 
 export const ConversationItem = React.memo(
     ({ id: conversationId, title: conversationTitle }: ConversationMeta) => {
+        const { conversationId: currentConversationId } = useParams<{ conversationId: ConversationID }>();
         const inputRef = React.useRef<HTMLInputElement>(null);
         const [title, setTitle] = React.useState(conversationTitle);
         const [isEditing, setIsEditing] = React.useState(false);
+        const navigate = useNavigate();
+
+        const isActive = conversationId === currentConversationId;
 
         const beginEditing = React.useCallback(() => {
             setIsEditing(true);
@@ -57,11 +62,18 @@ export const ConversationItem = React.memo(
         }, [acceptTitle, dismissTitle]);
 
         const deleteConversationClicked = React.useCallback(() => {
-            deleteConversation(conversationId).catch((error: unknown) => {
-                console.error("Failed to delete conversation:", error);
-                toast.error("Failed to delete the conversation");
-            });
-        }, [conversationId]);
+            deleteConversation(conversationId)
+                .then(() => {
+                    if (isActive) {
+                        // Return to the home page if the current conversation is deleted
+                        navigate("/");
+                    }
+                })
+                .catch((error: unknown) => {
+                    console.error("Failed to delete conversation:", error);
+                    toast.error("Failed to delete the conversation");
+                });
+        }, [conversationId, isActive, navigate]);
 
         React.useEffect(() => {
             if (isEditing) inputRef.current?.focus();
@@ -71,9 +83,10 @@ export const ConversationItem = React.memo(
             setTitle(conversationTitle);
         }, [conversationTitle]);
 
+
         return (
             <SidebarMenuItem>
-                <SidebarMenuButton asChild tooltip={title}>
+                <SidebarMenuButton asChild tooltip={title} isActive={isActive}>
                     {
                         isEditing ?
                             <Input
@@ -86,9 +99,9 @@ export const ConversationItem = React.memo(
                                 onKeyDown={editConversationSubmitted}
                                 onBlur={acceptTitle}
                             /> :
-                            <a href="#"><span>{title}</span></a>
+                            <Link to={`/${conversationId}`} >{title}</Link>
                     }
-                </SidebarMenuButton>
+                </SidebarMenuButton >
                 {
                     !isEditing &&
                     <DropdownMenu>
@@ -109,7 +122,7 @@ export const ConversationItem = React.memo(
                         </DropdownMenuContent>
                     </DropdownMenu>
                 }
-            </SidebarMenuItem>
+            </SidebarMenuItem >
         );
     }
 );
