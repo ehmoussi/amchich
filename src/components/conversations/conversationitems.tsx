@@ -1,27 +1,12 @@
+import { getConversationsMetadata } from "@/lib/db";
 import { SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarMenu } from "../ui/sidebar";
 import { ConversationItem } from "./conversationitem";
+import { useLiveQuery } from "dexie-react-hooks";
 
-
-const conversations = [
-    {
-        conversationId: crypto.randomUUID(),
-        title: "Conversation 1",
-        isActive: true
-    },
-    {
-        conversationId: crypto.randomUUID(),
-        title: "Conversation 2",
-        isActive: false
-    },
-    {
-        conversationId: crypto.randomUUID(),
-        title: "Conversation 3",
-        isActive: false
-    }
-];
 
 
 export function ConversationItems() {
+    const conversations = useLiveQuery(async () => await getConversationsMetadata());
     return (
         <SidebarContent>
             <SidebarGroup>
@@ -29,12 +14,10 @@ export function ConversationItems() {
                 <SidebarGroupContent>
                     <SidebarMenu>
                         {
-                            conversations.map((c) => (
+                            conversations?.map((conversation) => (
                                 <ConversationItem
-                                    key={c.conversationId}
-                                    conversationId={c.conversationId}
-                                    title={c.title}
-                                    isActive={c.isActive}
+                                    key={conversation.id}
+                                    {...conversation}
                                 />
                             ))
                         }
