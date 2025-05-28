@@ -66,7 +66,10 @@ export const ConversationItem = React.memo(
                 .then(() => {
                     if (isActive) {
                         // Return to the home page if the current conversation is deleted
-                        navigate("/");
+                        navigate("/")?.catch((error: unknown) => {
+                            console.error("Failed to navigate to the home page:", error);
+                            toast.error("Failed to go back to the home page");
+                        });
                     }
                 })
                 .catch((error: unknown) => {
@@ -99,7 +102,9 @@ export const ConversationItem = React.memo(
                                 onKeyDown={editConversationSubmitted}
                                 onBlur={acceptTitle}
                             /> :
-                            <Link to={`/${conversationId}`} >{title}</Link>
+                            <Link to={`/${conversationId}`}>
+                                <span className="text-lg">{title}</span>
+                            </Link>
                     }
                 </SidebarMenuButton >
                 {
