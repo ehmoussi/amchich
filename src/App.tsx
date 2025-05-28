@@ -4,11 +4,13 @@ import { ConversationSideBar } from "./components/conversations/conversationside
 import { LandingPage } from "./components/landingpage"
 import { SidebarProvider, SidebarTrigger } from "./components/ui/sidebar"
 import { Toaster } from "./components/ui/sonner"
+import { ChatMessages } from "./components/chat/chatmessages"
 
 
 export function AppConversation() {
     return (
         <App>
+            <ChatMessages />
             <ChatForm />
         </App>);
 }
