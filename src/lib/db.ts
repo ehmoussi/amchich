@@ -56,9 +56,21 @@ interface UserMessage extends BaseMessage {
 export type Message = AssistantMessage | UserMessage;
 
 
+
+export type LLMID = string;
+
+interface LLMModel {
+    name: LLMID;
+    isActive: boolean;
+}
+
+
+
+
 interface AmchichDB extends Dexie {
     conversations: Table<Conversation, ConversationID>;
     messages: Table<Message, MessageID>;
+    models: Table<LLMModel, LLMID>;
 }
 
 const amchichDB = new Dexie("amchichDB") as AmchichDB;
@@ -67,6 +79,7 @@ const amchichDB = new Dexie("amchichDB") as AmchichDB;
 amchichDB.version(1).stores({
     conversations: "id, createdAt, *firstMessageIds, lastMessageId",
     messages: "id, conversationId, role, createdAt, isActive, previousMessageId, *nextMessageIds",
+    models: "name, isActive",
 });
 
 export function isUserMessage(message: Message): message is UserMessage {
@@ -115,5 +128,24 @@ export async function deleteConversation(conversationId: ConversationID) {
     await amchichDB.transaction("rw", amchichDB.conversations, amchichDB.messages, async () => {
         await amchichDB.messages.where("conversationId").equals(conversationId).delete();
         await amchichDB.conversations.delete(conversationId);
+    });
+}
+
+export async function getLLMModels(): Promise<LLMModel[]> {
+    return await amchichDB.models.toArray();
+}
+
+export async function getActiveLLMModel(): Promise<LLMModel | undefined> {
+    return await amchichDB.models.filter((model) => model.isActive).first();
+}
+
+export async function setActiveLLMModel(name: LLMID) {
+    await amchichDB.transaction("rw", amchichDB.models, async () => {
+        const currentActiveModel = await amchichDB.models.filter((model) => model.isActive).first();
+        if (!currentActiveModel || currentActiveModel.name != name) {
+            if (currentActiveModel)
+                await amchichDB.models.update(currentActiveModel, { isActive: false });
+            await amchichDB.models.update(name, { isActive: true });
+        }
     });
 }

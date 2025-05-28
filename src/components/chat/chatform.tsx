@@ -1,5 +1,6 @@
 import React from "react";
 import { ChatTextarea } from "./chattextarea";
+import { ChatModelSelector } from "./chatmodelselector";
 
 export function ChatForm() {
     const [text, setText] = React.useState<string>("");
@@ -14,6 +15,7 @@ export function ChatForm() {
                     onChange={setText}
                     rows={2}
                     className="placeholder:text-muted-foreground flex-1 bg-transparent focus:outline-none text-lg" />
+                <ChatModelSelector />
             </div>
         </form>
     );
