@@ -1,7 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Route, Routes } from "react-router";
-import App from './App.tsx'
+import { AppConversation, AppLandingPage } from './App.tsx'
 
 const root = document.getElementById('root');
 if (root !== null)
@@ -9,9 +9,9 @@ if (root !== null)
         <StrictMode>
             <BrowserRouter>
                 <Routes>
-                    <Route path="/" element={<App />} />
-                    <Route path="/:conversationId" element={<App />} />
+                    <Route path="/" element={<AppLandingPage />} />
+                    <Route path="/:conversationId" element={<AppConversation />} />
                 </Routes>
             </BrowserRouter>
-        </StrictMode>,
+        </StrictMode >,
     );
