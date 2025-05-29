@@ -59,9 +59,10 @@ export type Message = AssistantMessage | UserMessage;
 
 export type LLMID = string;
 
-interface LLMModel {
+export interface LLMModel {
     name: LLMID;
     isActive: boolean;
+    createdAt: Date;
 }
 
 
@@ -79,7 +80,7 @@ const amchichDB = new Dexie("amchichDB") as AmchichDB;
 amchichDB.version(1).stores({
     conversations: "id, createdAt, *firstMessageIds, lastMessageId",
     messages: "id, conversationId, role, createdAt, isActive, previousMessageId, *nextMessageIds",
-    models: "name, isActive",
+    models: "name, isActive, createdAt",
 });
 
 export function isUserMessage(message: Message): message is UserMessage {
@@ -131,8 +132,35 @@ export async function deleteConversation(conversationId: ConversationID) {
     });
 }
 
+export async function addModel(name: LLMID): Promise<void> {
+    const createdAt = new Date();
+    await amchichDB.models.add({ name, isActive: false, createdAt });
+}
+
+
+export async function setModels(names: LLMID[]): Promise<LLMModel[]> {
+    let models: LLMModel[] = [];
+    await amchichDB.transaction("rw", amchichDB.models, async () => {
+        await amchichDB.models.clear();
+        const createdAt = new Date();
+        models = names.map((name) => ({ name, isActive: false, createdAt }));
+        await amchichDB.models.bulkAdd(models);
+    });
+    return models;
+}
+
+export async function clearLLMModels(): Promise<void> {
+    await amchichDB.models.clear();
+}
+
 export async function getLLMModels(): Promise<LLMModel[]> {
-    return await amchichDB.models.toArray();
+    return await amchichDB.models.orderBy("name").toArray();
+}
+
+
+export async function getLLMIds(): Promise<LLMID[]> {
+    const models = await getLLMModels();
+    return models.map((m) => m.name);
 }
 
 export async function getActiveLLMModel(): Promise<LLMModel | undefined> {
@@ -148,4 +176,15 @@ export async function setActiveLLMModel(name: LLMID) {
             await amchichDB.models.update(name, { isActive: true });
         }
     });
+}
+
+
+export async function areModelsObsolete(): Promise<boolean> {
+    const lastUpdate = (await amchichDB.models.orderBy("createdAt").last())?.createdAt;
+    if (lastUpdate) {
+        const today = new Date();
+        const oneDay = 24 * 60 * 60 * 1000;
+        return Math.floor((today.getTime() - lastUpdate.getTime()) / oneDay) > 1;
+    }
+    return true;
 }

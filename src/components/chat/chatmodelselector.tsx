@@ -1,48 +1,172 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
-import { setActiveLLMModel, getLLMModels, getActiveLLMModel, type LLMID } from "../../lib/db";
+import { setActiveLLMModel, getActiveLLMModel, type LLMID, type LLMModel, getLLMModels, areModelsObsolete } from "../../lib/db";
+import { updateAvailableModels } from "../../lib/llmmodels";
 import React from "react";
 import { toast } from "sonner";
+import { Button } from "../ui/button";
+import { Check, Loader2, RefreshCcw } from "lucide-react";
+import { handleAsyncError } from "../../lib/utils";
+import { useMounted } from "../../hooks/usemounted";
 
+const _SHOW_SUCCESS_DELAY = 1200; // How many ms the updated success message is displayed
 
-const ChatModelSelectContent = React.memo(() => {
-    const models = useLiveQuery(async () => await getLLMModels(), []);
+function ChatModelsUpdater({ showInitialSuccess }: { showInitialSuccess: boolean }) {
+    const [showSuccess, setShowSuccess] = React.useState<boolean>(showInitialSuccess);
+    const [isLoading, setIsLoading] = React.useState<boolean>(false);
+    const isMounted = useMounted();
+
+    React.useEffect(() => {
+        if (!showSuccess) return;
+        const timer = setTimeout(() => setShowSuccess(false), _SHOW_SUCCESS_DELAY);
+        return () => clearTimeout(timer)
+    }, [showSuccess]);
+
+    const updateAvailableModelsClicked = React.useCallback(() => {
+        if (!isMounted()) return;
+        setIsLoading(true);
+
+        const controller = new AbortController();
+
+        updateAvailableModels(controller.signal)
+            .then(() => {
+                if (isMounted())
+                    setShowSuccess(true);
+            })
+            .catch((error: unknown) => {
+                if (!controller.signal.aborted) {
+                    handleAsyncError(error, "Failed to fetch available models");
+                }
+            })
+            .finally(() => {
+                if (isMounted()) {
+                    setIsLoading(false);
+                }
+            });
+    }, [isMounted]);
+
+    if (isLoading) {
+        return (
+            <Button disabled variant="secondary">
+                <Loader2 className="animate-spin" />
+            </Button>
+        );
+    }
+
     return (
-        <SelectContent>
-            {
-                models?.map((model) => (
-                    <SelectItem key={model.name} value={model.name}>
-                        {model.name}
-                    </SelectItem>
-                ))
-            }
-        </SelectContent>
+        <div className="relative">
+            <div className="flex items-center gap-1">
+                <Button variant="secondary" onClick={updateAvailableModelsClicked} aria-label="Refresh models">
+                    <RefreshCcw />
+                </Button>
+                {showSuccess &&
+                    <>
+                        <Check className="w-4 h-4 text-green-600"
+                            aria-label="Models updated successfully" />
+                        <span className="text-xs text-green-600">Updated</span>
+                    </>
+                }
+            </div>
+        </div>
     );
-});
+}
 
 
 export function ChatModelSelector() {
-    const currentLLMModel = useLiveQuery(async () => await getActiveLLMModel(), []);
-    const currentModel: LLMID = currentLLMModel ? currentLLMModel.name : "";
-
-    const changeCurrentModel = React.useCallback((modelName: LLMID) => {
-        setActiveLLMModel(modelName).catch((error: unknown) => {
-            const msg = "Failed to update the current model";
+    const [showAutoUpdateSuccess, setShowAutoUpdateSuccess] = React.useState<boolean>(false);
+    const models = useLiveQuery(async (): Promise<LLMModel[]> => {
+        try {
+            return await getLLMModels();
+        } catch (error) {
+            const msg = "Failed to get available models";
             console.error(`${msg}:`, error);
             toast.error(msg);
+            return []
+        }
+    }, []);
+
+    const currentLLMModel = useLiveQuery(async (): Promise<LLMModel | undefined> => {
+        try {
+            return await getActiveLLMModel();
+        } catch (error) {
+            handleAsyncError(error, "Failed to get the current model");
+            return undefined;
+        }
+    }, []);
+
+    const currentModelId = currentLLMModel?.name as LLMID | undefined;
+
+    const changeCurrentModelId = React.useCallback((modelId: LLMID) => {
+        setActiveLLMModel(modelId).catch((error: unknown) => {
+            handleAsyncError(error, "Failed to update the current model");
         });
     }, []);
 
+    React.useEffect(() => {
+        const controller = new AbortController();
+
+        const fetchModels = async (): Promise<boolean> => {
+            if (await areModelsObsolete()) {
+                await updateAvailableModels(controller.signal);
+                return true;
+            }
+            return false;
+        }
+
+        fetchModels()
+            .then((isUpdated) => {
+                if (isUpdated)
+                    setShowAutoUpdateSuccess(true);
+            })
+            .catch((error: unknown) => {
+                if (!controller.signal.aborted)
+                    handleAsyncError(error, "Failed to fetch available models");
+            });
+
+        return () => { controller.abort(); }
+    }, []);
+
+    if (models === undefined) {
+        return (
+            <Select disabled>
+                <SelectTrigger>
+                    <SelectValue placeholder="Loading models..." />
+                </SelectTrigger>
+            </Select>
+        );
+    }
+
+    if (models.length === 0) {
+        return (
+            <Select disabled>
+                <SelectTrigger>
+                    <SelectValue placeholder="No models available" />
+                </SelectTrigger>
+            </Select>
+        );
+    }
 
     return (
-        <Select
-            value={currentModel}
-            onValueChange={changeCurrentModel}
-        >
-            <SelectTrigger>
-                <SelectValue placeholder="Select a model" />
-            </SelectTrigger>
-            <ChatModelSelectContent />
-        </Select>
+        <div className="flex gap-1">
+            <Select
+                value={currentModelId}
+                onValueChange={changeCurrentModelId}
+                aria-label="Select a model"
+            >
+                <SelectTrigger>
+                    <SelectValue placeholder="Select a model" />
+                </SelectTrigger>
+                <SelectContent>
+                    {
+                        models.map((model) => (
+                            <SelectItem key={model.name} value={model.name}>
+                                {model.name}
+                            </SelectItem>
+                        ))
+                    }
+                </SelectContent>
+            </Select>
+            <ChatModelsUpdater showInitialSuccess={showAutoUpdateSuccess} />
+        </div>
     );
 }

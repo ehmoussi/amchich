@@ -5,6 +5,7 @@ import { LandingPage } from "./components/landingpage"
 import { SidebarProvider, SidebarTrigger } from "./components/ui/sidebar"
 import { Toaster } from "./components/ui/sonner"
 import { ChatMessages } from "./components/chat/chatmessages"
+import { ChatModelSelector } from "./components/chat/chatmodelselector";
 
 
 export function AppConversation() {
@@ -30,6 +31,7 @@ function App({ children }: { children: React.ReactNode }) {
         <SidebarProvider defaultOpen={true}>
             <ConversationSideBar />
             <SidebarTrigger />
+            <ChatModelSelector />
             <main className="ring-none mx-auto flex h-svh max-h-svh w-full max-w-[80rem] flex-col items-stretch border-none">
                 {children}
                 <Toaster richColors />
