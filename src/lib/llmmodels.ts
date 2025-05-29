@@ -1,12 +1,18 @@
 import OpenAI from "openai";
-import { setModels, type LLMID, type LLMModel } from "./db";
+import { createModel, setModels, type LLMID, type LLMModel } from "./db";
 
 
-export async function updateAvailableModels(signal: AbortSignal): Promise<LLMModel[]> {
-    let names: LLMID[] = [];
+export async function updateAvailableModels(signal: AbortSignal) {
+    const models: LLMModel[] = [];
     const ollamaModelNames = await fetchOllamaModels(signal);
-    names.push(...ollamaModelNames);
-    return await setModels(names);
+    for (const name of ollamaModelNames) {
+        models.push(createModel(name, "Ollama"));
+    }
+    const openaiModelNames = await fetchOpenAiModels(signal);
+    for (const name of openaiModelNames) {
+        models.push(createModel(name, "OpenAI"));
+    }
+    await setModels(models);
 }
 
 async function fetchOllamaModels(signal: AbortSignal): Promise<LLMID[]> {
@@ -21,3 +27,19 @@ async function fetchOllamaModels(signal: AbortSignal): Promise<LLMID[]> {
     }
     return names;
 }
+
+
+
+async function fetchOpenAiModels(signal: AbortSignal): Promise<LLMID[]> {
+    const client = new OpenAI({
+        apiKey: import.meta.env.VITE_OPENAI_API_KEY,
+        dangerouslyAllowBrowser: true,
+    });
+    const names: LLMID[] = [];
+    for await (const model of await client.models.list({ signal: signal })) {
+        names.push(model.id);
+    }
+    return names;
+}
+
+

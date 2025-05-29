@@ -1,6 +1,6 @@
 import { useLiveQuery } from "dexie-react-hooks";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
-import { setActiveLLMModel, getActiveLLMModel, type LLMID, type LLMModel, getLLMModels, areModelsObsolete } from "../../lib/db";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "../ui/select";
+import { setActiveLLMModel, getActiveLLMModel, type LLMID, type LLMModel, areModelsObsolete, type LLMProvider, getLLMModelsByProvider, getMostUsedLLMModels } from "../../lib/db";
 import { updateAvailableModels } from "../../lib/llmmodels";
 import React from "react";
 import { toast } from "sonner";
@@ -10,6 +10,8 @@ import { handleAsyncError } from "../../lib/utils";
 import { useMounted } from "../../hooks/usemounted";
 
 const _SHOW_SUCCESS_DELAY = 1200; // How many ms the updated success message is displayed
+const _MAX_MOST_USED_MODELS = 5; // How many most used models are displayed
+
 
 function ChatModelsUpdater({ showInitialSuccess }: { showInitialSuccess: boolean }) {
     const [showSuccess, setShowSuccess] = React.useState<boolean>(showInitialSuccess);
@@ -18,8 +20,8 @@ function ChatModelsUpdater({ showInitialSuccess }: { showInitialSuccess: boolean
 
     React.useEffect(() => {
         if (!showSuccess) return;
-        const timer = setTimeout(() => setShowSuccess(false), _SHOW_SUCCESS_DELAY);
-        return () => clearTimeout(timer)
+        const timer = setTimeout(() => { setShowSuccess(false) }, _SHOW_SUCCESS_DELAY);
+        return () => { clearTimeout(timer) }
     }, [showSuccess]);
 
     const updateAvailableModelsClicked = React.useCallback(() => {
@@ -71,17 +73,23 @@ function ChatModelsUpdater({ showInitialSuccess }: { showInitialSuccess: boolean
     );
 }
 
+interface ModelsInfo {
+    modelsByProvider: Map<LLMProvider, LLMModel[]>;
+    mostUsedModels: LLMModel[];
+}
 
 export function ChatModelSelector() {
     const [showAutoUpdateSuccess, setShowAutoUpdateSuccess] = React.useState<boolean>(false);
-    const models = useLiveQuery(async (): Promise<LLMModel[]> => {
+    const modelsInfo = useLiveQuery(async (): Promise<ModelsInfo> => {
         try {
-            return await getLLMModels();
+            const modelsByProvider = await getLLMModelsByProvider();
+            const mostUsedModels = await getMostUsedLLMModels(_MAX_MOST_USED_MODELS);
+            return { modelsByProvider, mostUsedModels };
         } catch (error) {
             const msg = "Failed to get available models";
             console.error(`${msg}:`, error);
             toast.error(msg);
-            return []
+            return { modelsByProvider: new Map(), mostUsedModels: [] };
         }
     }, []);
 
@@ -94,7 +102,7 @@ export function ChatModelSelector() {
         }
     }, []);
 
-    const currentModelId = currentLLMModel?.name as LLMID | undefined;
+    const currentModelId = currentLLMModel?.name;
 
     const changeCurrentModelId = React.useCallback((modelId: LLMID) => {
         setActiveLLMModel(modelId).catch((error: unknown) => {
@@ -126,7 +134,7 @@ export function ChatModelSelector() {
         return () => { controller.abort(); }
     }, []);
 
-    if (models === undefined) {
+    if (modelsInfo === undefined) {
         return (
             <Select disabled>
                 <SelectTrigger>
@@ -136,7 +144,9 @@ export function ChatModelSelector() {
         );
     }
 
-    if (models.length === 0) {
+    const { modelsByProvider, mostUsedModels } = modelsInfo;
+
+    if (modelsByProvider.size === 0) {
         return (
             <Select disabled>
                 <SelectTrigger>
@@ -157,12 +167,35 @@ export function ChatModelSelector() {
                     <SelectValue placeholder="Select a model" />
                 </SelectTrigger>
                 <SelectContent>
+                    <SelectGroup>
+                        <SelectLabel>{`Most Used (${mostUsedModels.length})`}</SelectLabel>
+                        {
+                            mostUsedModels.map((model) => {
+                                return (
+                                    <SelectItem key={model.name} value={model.name}>
+                                        {model.name}
+                                    </SelectItem>
+                                );
+                            })
+                        }
+                    </SelectGroup>
                     {
-                        models.map((model) => (
-                            <SelectItem key={model.name} value={model.name}>
-                                {model.name}
-                            </SelectItem>
-                        ))
+                        Array.from(modelsByProvider.keys()).sort().map((provider) => {
+                            const models = modelsByProvider.get(provider);
+                            const nbModels = models?.length ?? 0;
+                            return (
+                                <SelectGroup key={provider}>
+                                    <SelectLabel>{`${provider} (${nbModels})`}</SelectLabel>
+                                    {
+                                        models?.map((model) => (
+                                            <SelectItem key={model.name} value={model.name}>
+                                                {model.name}
+                                            </SelectItem>
+                                        ))
+                                    }
+                                </SelectGroup>
+                            );
+                        })
                     }
                 </SelectContent>
             </Select>

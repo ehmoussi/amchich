@@ -58,11 +58,14 @@ export type Message = AssistantMessage | UserMessage;
 
 
 export type LLMID = string;
+export type LLMProvider = "Ollama" | "OpenAI";
 
 export interface LLMModel {
     name: LLMID;
     isActive: boolean;
     createdAt: Date;
+    provider: LLMProvider;
+    usageCount: number;
 }
 
 
@@ -80,7 +83,7 @@ const amchichDB = new Dexie("amchichDB") as AmchichDB;
 amchichDB.version(1).stores({
     conversations: "id, createdAt, *firstMessageIds, lastMessageId",
     messages: "id, conversationId, role, createdAt, isActive, previousMessageId, *nextMessageIds",
-    models: "name, isActive, createdAt",
+    models: "name, isActive, createdAt, provider, usageCount",
 });
 
 export function isUserMessage(message: Message): message is UserMessage {
@@ -132,21 +135,58 @@ export async function deleteConversation(conversationId: ConversationID) {
     });
 }
 
-export async function addModel(name: LLMID): Promise<void> {
+export function createModel(name: LLMID, provider: LLMProvider, date: Date | undefined = undefined): LLMModel {
+    const createdAt = date ?? new Date();
+    const usageCount = 0;
+    const isActive = false;
+    return {
+        name,
+        isActive,
+        provider,
+        createdAt,
+        usageCount
+    }
+}
+
+export async function addModel(name: LLMID, provider: LLMProvider): Promise<void> {
     const createdAt = new Date();
-    await amchichDB.models.add({ name, isActive: false, createdAt });
+    await amchichDB.models.add({ name, isActive: false, createdAt, provider, usageCount: 0 });
 }
 
 
-export async function setModels(names: LLMID[]): Promise<LLMModel[]> {
-    let models: LLMModel[] = [];
+export async function setModels(models: LLMModel[]) {
     await amchichDB.transaction("rw", amchichDB.models, async () => {
-        await amchichDB.models.clear();
+        const oldModels = await amchichDB.models.toArray();
+
+        const toDeleteNames: LLMID[] = [];
+        const newModels: LLMModel[] = [];
+        for (const { name: oldName } of oldModels) {
+            let toDelete = true;
+            for (const { name } of models) {
+                if (name === oldName) {
+                    toDelete = false;
+                    break;
+                }
+            }
+            if (toDelete) toDeleteNames.push(oldName);
+        }
         const createdAt = new Date();
-        models = names.map((name) => ({ name, isActive: false, createdAt }));
-        await amchichDB.models.bulkAdd(models);
+        for (const { name, provider } of models) {
+            let canAdd = true;
+            for (const { name: oldName } of oldModels) {
+                if (name === oldName) {
+                    canAdd = false;
+                    break;
+                }
+            }
+            if (canAdd)
+                newModels.push(createModel(name, provider, createdAt));
+        }
+        if (toDeleteNames.length > 0)
+            await amchichDB.models.bulkDelete(toDeleteNames);
+        if (newModels.length > 0)
+            await amchichDB.models.bulkAdd(newModels);
     });
-    return models;
 }
 
 export async function clearLLMModels(): Promise<void> {
@@ -157,6 +197,26 @@ export async function getLLMModels(): Promise<LLMModel[]> {
     return await amchichDB.models.orderBy("name").toArray();
 }
 
+
+export async function getLLMModelsByProvider(): Promise<Map<LLMProvider, LLMModel[]>> {
+    const modelsByProvider = new Map();
+    const models = await amchichDB.models.orderBy("name").toArray();
+    for (const model of models) {
+        if (modelsByProvider.has(model.provider))
+            modelsByProvider.get(model.provider)?.push(model);
+        else
+            modelsByProvider.set(model.provider, [model]);
+    }
+    return modelsByProvider;
+}
+
+export async function getMostUsedLLMModels(maxModels: number): Promise<LLMModel[]> {
+    return await amchichDB.models
+        .orderBy("usageCount")
+        .filter((m) => m.usageCount > 0)
+        .limit(maxModels)
+        .toArray();
+}
 
 export async function getLLMIds(): Promise<LLMID[]> {
     const models = await getLLMModels();

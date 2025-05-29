@@ -32,7 +32,7 @@ function App({ children }: { children: React.ReactNode }) {
             <ConversationSideBar />
             <SidebarTrigger />
             <ChatModelSelector />
-            <main className="ring-none mx-auto flex h-svh max-h-svh w-full max-w-[80rem] flex-col items-stretch border-none">
+            <main className="ring-none mx-auto flex h-svh max-h-svh w-full max-w-[70rem] flex-col items-stretch border-none">
                 {children}
                 <Toaster richColors />
             </main >
