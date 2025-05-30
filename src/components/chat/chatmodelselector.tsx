@@ -49,7 +49,7 @@ function ChatModelsUpdater({ showInitialSuccess }: { showInitialSuccess: boolean
 
     if (isLoading) {
         return (
-            <Button disabled variant="secondary">
+            <Button disabled variant="ghost">
                 <Loader2 className="animate-spin" />
             </Button>
         );
@@ -58,7 +58,7 @@ function ChatModelsUpdater({ showInitialSuccess }: { showInitialSuccess: boolean
     return (
         <div className="relative">
             <div className="flex items-center gap-1">
-                <Button variant="secondary" onClick={updateAvailableModelsClicked} aria-label="Refresh models">
+                <Button variant="ghost" onClick={updateAvailableModelsClicked} aria-label="Refresh models">
                     <RefreshCcw />
                 </Button>
                 {showSuccess &&
@@ -168,7 +168,7 @@ export function ChatModelSelector() {
                 </SelectTrigger>
                 <SelectContent>
                     <SelectGroup>
-                        <SelectLabel>{`Most Used (${mostUsedModels.length})`}</SelectLabel>
+                        <SelectLabel>{`Most Used (${mostUsedModels.length.toString()})`}</SelectLabel>
                         {
                             mostUsedModels.map((model) => {
                                 return (
@@ -185,7 +185,7 @@ export function ChatModelSelector() {
                             const nbModels = models?.length ?? 0;
                             return (
                                 <SelectGroup key={provider}>
-                                    <SelectLabel>{`${provider} (${nbModels})`}</SelectLabel>
+                                    <SelectLabel>{`${provider} (${nbModels.toString()})`}</SelectLabel>
                                     {
                                         models?.map((model) => (
                                             <SelectItem key={model.name} value={model.name}>

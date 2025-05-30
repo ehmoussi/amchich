@@ -22,7 +22,7 @@ export interface Conversation {
 
 interface MessageFiles {
     metadata: File[]; // metadata of the files
-    content: string; // Concatenation of the files to present to the LLM
+    content?: string; // Concatenation of the files to append to the LLM
 }
 
 interface MessageContent {
@@ -36,6 +36,7 @@ interface BaseMessage {
     id: MessageID;
     conversationId: ConversationID;
     role: Role;
+    modelId: LLMID | undefined;
     createdAt: Date;
     content: MessageContent;
     previousMessageId?: MessageID;
@@ -135,6 +136,65 @@ export async function deleteConversation(conversationId: ConversationID) {
     });
 }
 
+
+export async function addMessage(message: Message): Promise<void> {
+    await amchichDB.transaction(
+        "rw", amchichDB.conversations, amchichDB.messages,
+        async () => {
+            const conversation = await amchichDB.conversations.get(message.conversationId);
+            if (!conversation)
+                throw new Error("Can't find the conversation associated to the given message");
+            message.previousMessageId = conversation.lastMessageId;
+            if (!conversation.lastMessageId) {
+                await amchichDB.conversations.update(
+                    conversation.id,
+                    {
+                        firstMessageIds: [...conversation.firstMessageIds, message.id],
+                        lastMessageId: message.id
+                    }
+                );
+            }
+            await amchichDB.messages.add(message);
+        }
+    );
+}
+
+
+export function createMessage(
+    conversationId: ConversationID,
+    role: "assistant",
+    text: string,
+    files: File[],
+    isActive: true,
+    modelId: LLMID,
+): AssistantMessage;
+export function createMessage(
+    conversationId: ConversationID,
+    role: "user",
+    text: string,
+    files: File[],
+    isActive: boolean,
+): UserMessage;
+export function createMessage(conversationId: ConversationID, role: Role, text: string, files: File[], isActive: boolean, modelId?: LLMID): Message {
+    if (role === "assistant" && !isActive)
+        throw new Error("Can't create an assistant message which is not active.");
+    return {
+        id: crypto.randomUUID(),
+        conversationId,
+        role,
+        modelId,
+        isActive,
+        createdAt: new Date(),
+        content: {
+            message: text,
+            files: {
+                metadata: files,
+            },
+        },
+    } as Message;
+}
+
+
 export function createModel(name: LLMID, provider: LLMProvider, date: Date | undefined = undefined): LLMModel {
     const createdAt = date ?? new Date();
     const usageCount = 0;
@@ -199,7 +259,7 @@ export async function getLLMModels(): Promise<LLMModel[]> {
 
 
 export async function getLLMModelsByProvider(): Promise<Map<LLMProvider, LLMModel[]>> {
-    const modelsByProvider = new Map();
+    const modelsByProvider = new Map<LLMProvider, LLMModel[]>();
     const models = await amchichDB.models.orderBy("name").toArray();
     for (const model of models) {
         if (modelsByProvider.has(model.provider))

@@ -6,6 +6,7 @@ import React from "react";
 import { Input } from "../ui/input";
 import { toast } from "sonner";
 import { Link, useNavigate, useParams } from "react-router";
+import { handleAsyncError } from "../../lib/utils";
 
 const CONVERSATION_TITLE_MAX_LENGTH = 100;
 
@@ -46,8 +47,7 @@ export const ConversationItem = React.memo(
             }
             setIsEditing(false);
             updateConversationTitle(conversationId, trimmedTitle).catch((error: unknown) => {
-                console.error("Failed to update conversation title:", error);
-                toast.error("Failed to update the conversation title");
+                handleAsyncError(error, "Failed to update conversation title");
                 dismissTitle();
             });
         }, [conversationId, title, dismissTitle]);
@@ -67,14 +67,12 @@ export const ConversationItem = React.memo(
                     if (isActive) {
                         // Return to the home page if the current conversation is deleted
                         navigate("/")?.catch((error: unknown) => {
-                            console.error("Failed to navigate to the home page:", error);
-                            toast.error("Failed to go back to the home page");
+                            handleAsyncError(error, "Failed to navigate to the home page");
                         });
                     }
                 })
                 .catch((error: unknown) => {
-                    console.error("Failed to delete conversation:", error);
-                    toast.error("Failed to delete the conversation");
+                    handleAsyncError(error, "Failed to delete conversation");
                 });
         }, [conversationId, isActive, navigate]);
 
