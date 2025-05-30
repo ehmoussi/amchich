@@ -47,13 +47,13 @@ export function ChatForm() {
 
 
 
-    const handleKeyDown = async (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    const handleKeyDown = React.useCallback((event: React.KeyboardEvent<HTMLTextAreaElement>) => {
         // Shift+Enter break the line otherwise it send the message
         if (event.key === "Enter" && !event.shiftKey) {
             event.preventDefault();
             submitMessage();
         }
-    };
+    }, [submitMessage]);
 
     return (
         <form

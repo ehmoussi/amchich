@@ -26,7 +26,7 @@ interface MessageFiles {
 }
 
 interface MessageContent {
-    message: string;
+    text: string;
     files: MessageFiles;
     thinking?: string;
 }
@@ -44,12 +44,12 @@ interface BaseMessage {
 }
 
 
-interface AssistantMessage extends BaseMessage {
+export interface AssistantMessage extends BaseMessage {
     role: "assistant";
     isActive: true;
 }
 
-interface UserMessage extends BaseMessage {
+export interface UserMessage extends BaseMessage {
     role: "user";
     isActive: boolean;
 }
@@ -75,6 +75,7 @@ export interface LLMModel {
 interface AmchichDB extends Dexie {
     conversations: Table<Conversation, ConversationID>;
     messages: Table<Message, MessageID>;
+    streamingMessages: Table<AssistantMessage, MessageID>;
     models: Table<LLMModel, LLMID>;
 }
 
@@ -84,6 +85,7 @@ const amchichDB = new Dexie("amchichDB") as AmchichDB;
 amchichDB.version(1).stores({
     conversations: "id, createdAt, *firstMessageIds, lastMessageId",
     messages: "id, conversationId, role, createdAt, isActive, previousMessageId, *nextMessageIds",
+    streamingMessages: "id, conversationId",
     models: "name, isActive, createdAt, provider, usageCount",
 });
 
@@ -159,6 +161,18 @@ export async function addMessage(message: Message): Promise<void> {
     );
 }
 
+export async function getConversationMessages(conversationId: ConversationID): Promise<Message[]> {
+    return await amchichDB.messages
+        .where({ conversationId })
+        .filter((msg) => msg.isActive)
+        .toArray();
+}
+
+
+export async function getStreamingMessage(conversationId: ConversationID): Promise<AssistantMessage | undefined> {
+    return await amchichDB.streamingMessages.get({ conversationId });
+}
+
 
 export function createMessage(
     conversationId: ConversationID,
@@ -186,7 +200,7 @@ export function createMessage(conversationId: ConversationID, role: Role, text: 
         isActive,
         createdAt: new Date(),
         content: {
-            message: text,
+            text,
             files: {
                 metadata: files,
             },
