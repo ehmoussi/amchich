@@ -23,7 +23,7 @@ export function ChatMessages() {
             handleAsyncError(error, "Failed to retrieve the messages");
             return [];
         }
-    }, []);
+    }, [conversationId]);
 
     return (
         <div className="flex-1 content-center overflow-y-auto px-6">

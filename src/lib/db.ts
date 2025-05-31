@@ -272,10 +272,11 @@ export async function getLLMModels(): Promise<LLMModel[]> {
 }
 
 
-export async function getLLMModelsByProvider(): Promise<Map<LLMProvider, LLMModel[]>> {
+export async function getLLMModelsByProvider(ignoreModels: LLMModel[]): Promise<Map<LLMProvider, LLMModel[]>> {
     const modelsByProvider = new Map<LLMProvider, LLMModel[]>();
     const models = await amchichDB.models.orderBy("name").toArray();
     for (const model of models) {
+        if (ignoreModels.some((m) => model.name === m.name)) continue;
         if (modelsByProvider.has(model.provider))
             modelsByProvider.get(model.provider)?.push(model);
         else

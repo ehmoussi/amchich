@@ -82,8 +82,8 @@ export function ChatModelSelector() {
     const [showAutoUpdateSuccess, setShowAutoUpdateSuccess] = React.useState<boolean>(false);
     const modelsInfo = useLiveQuery(async (): Promise<ModelsInfo> => {
         try {
-            const modelsByProvider = await getLLMModelsByProvider();
             const mostUsedModels = await getMostUsedLLMModels(_MAX_MOST_USED_MODELS);
+            const modelsByProvider = await getLLMModelsByProvider(mostUsedModels);
             return { modelsByProvider, mostUsedModels };
         } catch (error) {
             const msg = "Failed to get available models";
