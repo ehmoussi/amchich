@@ -1,5 +1,5 @@
 import type { UUID } from "crypto";
-import { Dexie, type Table } from "dexie";
+import { add, Dexie, type Table } from "dexie";
 
 export type ConversationID = UUID;
 export type MessageID = UUID;
@@ -40,7 +40,7 @@ interface BaseMessage {
     createdAt: Date;
     content: MessageContent;
     previousMessageId?: MessageID;
-    nextMessageIds?: MessageID;
+    nextMessageIds?: MessageID[];
 }
 
 
@@ -138,6 +138,10 @@ export async function deleteConversation(conversationId: ConversationID) {
     });
 }
 
+export async function isConversationStreaming(conversationId: ConversationID): Promise<boolean> {
+    return await amchichDB.streamingMessages.where({ conversationId }).first() !== undefined;
+}
+
 
 export async function addMessage(message: Message): Promise<void> {
     await amchichDB.transaction(
@@ -155,6 +159,14 @@ export async function addMessage(message: Message): Promise<void> {
                         lastMessageId: message.id
                     }
                 );
+            } else {
+                const previousMessage = await amchichDB.messages.get(conversation.lastMessageId);
+                if (previousMessage) {
+                    await amchichDB.messages.update(
+                        conversation.lastMessageId,
+                        { nextMessageIds: [...(previousMessage.nextMessageIds ?? []), message.id] }
+                    );
+                }
             }
             await amchichDB.messages.add(message);
         }
@@ -165,12 +177,21 @@ export async function getConversationMessages(conversationId: ConversationID): P
     return await amchichDB.messages
         .where({ conversationId })
         .filter((msg) => msg.isActive)
-        .toArray();
+        .sortBy("createdAt");
 }
 
 
 export async function getStreamingMessage(conversationId: ConversationID): Promise<AssistantMessage | undefined> {
     return await amchichDB.streamingMessages.get({ conversationId });
+}
+
+
+export async function updateStreamingMessage(message: AssistantMessage): Promise<void> {
+    await amchichDB.streamingMessages.put(message);
+}
+
+export async function deleteStreamingMessage(conversationId: ConversationID): Promise<void> {
+    await amchichDB.streamingMessages.where({ conversationId }).delete();
 }
 
 
@@ -322,4 +343,9 @@ export async function areModelsObsolete(): Promise<boolean> {
         return Math.floor((today.getTime() - lastUpdate.getTime()) / oneDay) > 1;
     }
     return true;
+}
+
+
+export async function incrementUsageCount(modelId: LLMID): Promise<void> {
+    await amchichDB.models.update(modelId, { usageCount: add(1) });
 }

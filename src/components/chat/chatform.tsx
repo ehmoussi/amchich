@@ -1,10 +1,17 @@
 import React from "react";
 import { ChatTextarea } from "./chattextarea";
 import { Button } from "../ui/button";
-import { ArrowUp, Paperclip } from "lucide-react";
+import { ArrowUp, CircleStop, Paperclip } from "lucide-react";
 import { useNavigate, useParams } from "react-router";
-import { addMessage, createConversation, createMessage, type ConversationID } from "../../lib/db";
+import { addMessage, createConversation, createMessage, isConversationStreaming, type ConversationID } from "../../lib/db";
 import { handleAsyncError } from "../../lib/utils";
+import Worker from "../../lib/worker?worker";
+import { useLiveQuery } from "dexie-react-hooks";
+
+const worker = new Worker();
+worker.addEventListener("error",
+    (error) => { handleAsyncError(error, "Worker failed to stream the answer"); }
+);
 
 export function ChatForm() {
     const fileInputRef = React.useRef<HTMLInputElement | null>(null);
@@ -13,12 +20,19 @@ export function ChatForm() {
     const [selectedFiles, setSelectedFiles] = React.useState<File[]>([]);
     const navigate = useNavigate();
 
+    const isStreaming = useLiveQuery(async (): Promise<boolean> => {
+        if (!conversationId) return false;
+        return await isConversationStreaming(conversationId);
+    }, [conversationId]) ?? false;
+
     const startConversation = React.useCallback((cid: ConversationID) => {
-        const message = createMessage(cid, "user", text, selectedFiles, true);
-        addMessage(message)
+        const userMessage = createMessage(cid, "user", text, selectedFiles, true);
+        addMessage(userMessage)
             .then(() => {
                 setText("");
                 setSelectedFiles([]);
+                console.log("worker postMessage to init stream answer");
+                worker.postMessage({ type: "init", payload: { conversationId: cid } });
             })
             .catch((error: unknown) => {
                 handleAsyncError(error, "Failed to add the message");
@@ -42,8 +56,11 @@ export function ChatForm() {
 
     const handleSubmit = React.useCallback((e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        submitMessage();
-    }, [submitMessage]);
+        if (isStreaming)
+            worker.postMessage({ type: "abort" });
+        else
+            submitMessage();
+    }, [submitMessage, isStreaming]);
 
 
 
@@ -120,44 +137,10 @@ export function ChatForm() {
                         className="w-12 h-12 rounded-full p-0 hover:bg-muted disabled:opacity-50 border border-neutral-500 bg-neutral-200"
                         disabled={false}
                     >
-                        <ArrowUp size={28} />
+                        {isStreaming ? <CircleStop size={28} /> : <ArrowUp size={28} />}
                     </Button>
                 </div>
             </div>
         </form>
     );
-    // <form
-    //     // onSubmit={ }
-    //     className="
-    //     border border-black border-input bg-background focus-within:ring-ring/10 relative mx-6 mb-6 flex flex-col items-start rounded-[10px] px-3 py-1.5 pr-8 text-sm focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-0"
-    // >
-    //     <div className="flex">
-    //         <div className="flex-1 flex-col">
-    //             <ChatTextarea
-    //                 value={text}
-    //                 onChange={setText}
-    //                 rows={2}
-    //                 className="placeholder:text-muted-foreground flex-1 bg-transparent focus:outline-none text-lg" />
-    //             <input type="file" ref={fileInputRef} onChange={() => { }} hidden multiple />
-    //             <Button
-    //                 disabled={true}
-    //                 type="button"
-    //                 variant="ghost"
-    //                 size="sm"
-    //                 className="mr-1 size-6 rounded-full"
-    //                 onClick={() => { }}
-    //             >
-    //                 <PaperclipIcon size={16} />
-    //             </Button>
-    //         </div>
-    //         <Button variant="ghost" className="size-6 rounded-full flex-none">
-    //             <ArrowUpIcon size={24} />
-    //             {/* {
-    //                 isDisabled ?
-    //                     <CircleStopIcon size={24} /> :
-    //             } */}
-    //         </Button>
-    //     </div>
-    // </form >
-    // );
 }
