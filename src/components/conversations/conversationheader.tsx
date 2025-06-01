@@ -11,7 +11,7 @@ export function ConversationHeader() {
     const newConversationClicked = React.useCallback(() => {
         createConversation(true)
             .then((conversationId) => {
-                void navigate(conversationId.toString());
+                void navigate(`/${conversationId.toString()}`);
             })
             .catch((error: unknown) => {
                 console.log("Failed to create a new conversation:", error);

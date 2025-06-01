@@ -44,7 +44,7 @@ export function ChatForm() {
         if (!conversationId) {
             createConversation(true)
                 .then((cid) => {
-                    void navigate(cid.toString());
+                    void navigate(`/${cid.toString()}`);
                     startConversation(cid);
                 }).catch((error: unknown) => {
                     handleAsyncError(error, "Failed to create a new conversation");

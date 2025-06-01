@@ -66,9 +66,7 @@ export const ConversationItem = React.memo(
                 .then(() => {
                     if (isActive) {
                         // Return to the home page if the current conversation is deleted
-                        navigate("/")?.catch((error: unknown) => {
-                            handleAsyncError(error, "Failed to navigate to the home page");
-                        });
+                        void navigate("/");
                     }
                 })
                 .catch((error: unknown) => {
