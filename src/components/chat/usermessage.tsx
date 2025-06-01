@@ -1,6 +1,7 @@
+import React from "react";
 import type { UserMessage as UMessage } from "../../lib/db";
 
-export function UserMessage({ message }: { message: UMessage }) {
+export const UserMessage = React.memo(function UserMessage({ message }: { message: UMessage }) {
     return (
         <div className="group flex flex-col">
             <div
@@ -10,4 +11,4 @@ export function UserMessage({ message }: { message: UMessage }) {
             </div>
         </div>
     );
-}
+});
