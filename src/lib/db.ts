@@ -36,7 +36,6 @@ interface BaseMessage {
     id: MessageID;
     conversationId: ConversationID;
     role: Role;
-    modelId: LLMID | undefined;
     createdAt: Date;
     content: MessageContent;
     previousMessageId?: MessageID;
@@ -46,11 +45,13 @@ interface BaseMessage {
 
 export interface AssistantMessage extends BaseMessage {
     role: "assistant";
+    modelId: LLMID | undefined;
     isActive: true;
 }
 
 export interface UserMessage extends BaseMessage {
     role: "user";
+    modelId: undefined;
     isActive: boolean;
 }
 
@@ -201,7 +202,7 @@ export function createMessage(
     text: string,
     files: File[],
     isActive: true,
-    modelId: LLMID,
+    modelId?: LLMID,
 ): AssistantMessage;
 export function createMessage(
     conversationId: ConversationID,

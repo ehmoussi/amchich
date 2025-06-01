@@ -5,8 +5,9 @@ const _BUFFER_STREAMING_SIZE = 30;
 
 let controller: AbortController | undefined;
 
-type WorkerStreamingMessage =
-    { type: "init", payload: { conversationId: ConversationID } }
+export type WorkerStreamingMessage =
+    | { type: "init", payload: { conversationId: ConversationID } }
+    | { type: "finished" }
     | { type: "abort" };
 
 
@@ -92,5 +93,6 @@ async function streamAnswer(conversationId: ConversationID, signal: AbortSignal)
         }
         // 10. Clean the db
         await deleteStreamingMessage(conversationId);
+        self.postMessage({ type: "finished" });
     }
 }

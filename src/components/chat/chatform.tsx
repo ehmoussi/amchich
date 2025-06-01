@@ -5,13 +5,10 @@ import { ArrowUp, CircleStop, Paperclip } from "lucide-react";
 import { useNavigate, useParams } from "react-router";
 import { addMessage, createConversation, createMessage, isConversationStreaming, type ConversationID } from "../../lib/db";
 import { handleAsyncError } from "../../lib/utils";
-import Worker from "../../lib/worker?worker";
 import { useLiveQuery } from "dexie-react-hooks";
+import { WorkerPool } from "../../lib/workerpool";
 
-const worker = new Worker();
-worker.addEventListener("error",
-    (error) => { handleAsyncError(error, "Worker failed to stream the answer"); }
-);
+const workerPool = new WorkerPool(3);
 
 export function ChatForm() {
     const fileInputRef = React.useRef<HTMLInputElement | null>(null);
@@ -31,8 +28,10 @@ export function ChatForm() {
             .then(() => {
                 setText("");
                 setSelectedFiles([]);
-                console.log("worker postMessage to init stream answer");
-                worker.postMessage({ type: "init", payload: { conversationId: cid } });
+                workerPool.startStreaming(cid)
+                    .catch((error: unknown) => {
+                        handleAsyncError(error, "Failed to start the streaming");
+                    });
             })
             .catch((error: unknown) => {
                 handleAsyncError(error, "Failed to add the message");
@@ -56,11 +55,15 @@ export function ChatForm() {
 
     const handleSubmit = React.useCallback((e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        if (isStreaming)
-            worker.postMessage({ type: "abort" });
-        else
+        if (isStreaming) {
+            if (conversationId) workerPool.abortStreaming(conversationId).catch((error: unknown) => {
+                handleAsyncError(error, "Failed to abort the conversation");
+            });
+        }
+        else {
             submitMessage();
-    }, [submitMessage, isStreaming]);
+        }
+    }, [submitMessage, isStreaming, conversationId]);
 
 
 
