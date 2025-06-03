@@ -3,7 +3,7 @@ import { ChatTextarea } from "./chattextarea";
 import { Button } from "../ui/button";
 import { ArrowUp, CircleStop, Paperclip } from "lucide-react";
 import { useNavigate, useParams } from "react-router";
-import { addMessage, createConversation, createMessage, isConversationStreaming, type ConversationID } from "../../lib/db";
+import { addUserMessage, createConversation, createMessage, isConversationStreaming, type ConversationID } from "../../lib/db";
 import { handleAsyncError } from "../../lib/utils";
 import { useLiveQuery } from "dexie-react-hooks";
 import { WorkerPool } from "../../lib/workerpool";
@@ -24,7 +24,7 @@ export function ChatForm() {
 
     const startConversation = React.useCallback((cid: ConversationID) => {
         const userMessage = createMessage(cid, "user", text, selectedFiles, true);
-        addMessage(userMessage)
+        addUserMessage(userMessage)
             .then(() => {
                 setText("");
                 setSelectedFiles([]);

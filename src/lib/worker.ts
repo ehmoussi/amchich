@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { addMessage, createMessage, deleteStreamingMessage, getActiveLLMModel, getConversationMessages, incrementUsageCount, updateStreamingMessage, type ConversationID } from "./db";
+import { addAssistantMessageAndClean, createMessage, deleteStreamingMessage, getActiveLLMModel, getConversationMessages, incrementUsageCount, updateStreamingMessage, type ConversationID } from "./db";
 
 const _BUFFER_STREAMING_SIZE = 30;
 
@@ -88,11 +88,12 @@ async function streamAnswer(conversationId: ConversationID, signal: AbortSignal)
     } finally {
         if (message.content.text !== "") {
             // TODO: 8. Update title of the conversation
-            // 9. Save in the db the answer
-            await addMessage(message);
+            // 9. Save in the db the answer and clean the streaming message
+            await addAssistantMessageAndClean(message);
+        } else {
+            // 8. Clean the streaming message
+            await deleteStreamingMessage(conversationId);
         }
-        // 10. Clean the db
-        await deleteStreamingMessage(conversationId);
         self.postMessage({ type: "finished" });
     }
 }

@@ -144,35 +144,48 @@ export async function isConversationStreaming(conversationId: ConversationID): P
 }
 
 
-export async function addMessage(message: Message): Promise<void> {
+export async function addUserMessage(message: Message): Promise<void> {
     await amchichDB.transaction(
         "rw", amchichDB.conversations, amchichDB.messages,
+        async () => { await addMessage(message); }
+    );
+}
+
+export async function addAssistantMessageAndClean(message: Message): Promise<void> {
+    await amchichDB.transaction(
+        "rw", amchichDB.conversations, amchichDB.messages, amchichDB.streamingMessages,
         async () => {
-            const conversation = await amchichDB.conversations.get(message.conversationId);
-            if (!conversation)
-                throw new Error("Can't find the conversation associated to the given message");
-            message.previousMessageId = conversation.lastMessageId;
-            if (!conversation.lastMessageId) {
-                await amchichDB.conversations.update(
-                    conversation.id,
-                    {
-                        firstMessageIds: [...conversation.firstMessageIds, message.id],
-                        lastMessageId: message.id
-                    }
-                );
-            } else {
-                const previousMessage = await amchichDB.messages.get(conversation.lastMessageId);
-                if (previousMessage) {
-                    await amchichDB.messages.update(
-                        conversation.lastMessageId,
-                        { nextMessageIds: [...(previousMessage.nextMessageIds ?? []), message.id] }
-                    );
-                }
-            }
-            await amchichDB.messages.add(message);
+            await addMessage(message);
+            await amchichDB.streamingMessages.where({ conversationId: message.conversationId }).delete();
         }
     );
 }
+
+async function addMessage(message: Message): Promise<void> {
+    const conversation = await amchichDB.conversations.get(message.conversationId);
+    if (!conversation)
+        throw new Error("Can't find the conversation associated to the given message");
+    message.previousMessageId = conversation.lastMessageId;
+    if (!conversation.lastMessageId) {
+        await amchichDB.conversations.update(
+            conversation.id,
+            {
+                firstMessageIds: [...conversation.firstMessageIds, message.id],
+                lastMessageId: message.id
+            }
+        );
+    } else {
+        const previousMessage = await amchichDB.messages.get(conversation.lastMessageId);
+        if (previousMessage) {
+            await amchichDB.messages.update(
+                conversation.lastMessageId,
+                { nextMessageIds: [...(previousMessage.nextMessageIds ?? []), message.id] }
+            );
+        }
+    }
+    await amchichDB.messages.add(message);
+}
+
 
 export async function getConversationMessages(conversationId: ConversationID): Promise<Message[]> {
     return await amchichDB.messages
