@@ -1,0 +1,23 @@
+{
+  "name": "amchich-backend",
+  "version": "1.0.0",
+  "description": "Little backend for Amchich to secure the API key",
+  "scripts": {
+    "dev": "tsx watch --env-file=.env index.ts",
+    "build": "tsc",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.11.0",
+  "dependencies": {
+    "@hono/node-server": "^1.14.3",
+    "hono": "^4.7.11"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.21",
+    "tsx": "^4.19.4",
+    "typescript": "~5.8.3"
+  }
+}

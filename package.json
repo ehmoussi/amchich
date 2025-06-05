@@ -4,7 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "concurrently 'pnpm run dev:frontend' 'pnpm run dev:backend'",
+    "dev:backend": "cd server && pnpm run dev",
+    "dev:frontend": "vite",
     "tbuild": "tsc -b",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
@@ -42,6 +44,7 @@
     "@types/react-dom": "^19.1.2",
     "@types/react-syntax-highlighter": "^15.5.13",
     "@vitejs/plugin-react-swc": "^3.9.0",
+    "concurrently": "^9.1.2",
     "eslint": "^9.25.0",
     "eslint-plugin-react-dom": "^1.49.0",
     "eslint-plugin-react-hooks": "^5.2.0",

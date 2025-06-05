@@ -53,7 +53,8 @@ async function streamAnswer(conversationId: ConversationID, signal: AbortSignal)
         });
     else
         client = new OpenAI({
-            apiKey: import.meta.env.VITE_OPENAI_API_KEY as string,
+            baseURL: "http://localhost:3001/api/v1/openai",
+            apiKey: "dummy",
             dangerouslyAllowBrowser: true,
         });
     try {
