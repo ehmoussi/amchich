@@ -64,11 +64,15 @@ export class WorkerPool {
 
     public async abortStreaming(conversationId: ConversationID): Promise<void> {
         if (this.waitingConversations.delete(conversationId)) {
+            // console.log("Delete waiting streaming message of conversation", conversationId);
             await deleteStreamingMessage(conversationId);
         } else {
             const workerState = this.workers.find((w) => w.conversationId === conversationId);
             // abort will send a finished message so no need of processing waiting conversations
-            if (workerState) workerState.worker.postMessage({ type: "abort" });
+            if (workerState) {
+                workerState.worker.postMessage({ type: "abort" });
+                // console.log("Send abort message to the worker of", conversationId);
+            }
         }
     }
 

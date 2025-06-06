@@ -1,5 +1,5 @@
 import { useParams } from "react-router";
-import { getConversationMessages, getStreamingMessage, type ConversationID, type Message, type AssistantMessage as AMessage } from "../../lib/db";
+import { getConversationMessages, getStreamingMessage, type ConversationID, type Message } from "../../lib/db";
 import { useLiveQuery } from "dexie-react-hooks";
 import { handleAsyncError } from "../../lib/utils";
 import { UserMessage } from "./usermessage";

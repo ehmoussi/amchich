@@ -1,0 +1,81 @@
+import { WorkerPool } from "../lib/workerpool";
+import { handleAsyncError } from "../lib/utils";
+import { addUserMessage, createConversation, createMessage, type ConversationID } from "../lib/db";
+import React from "react";
+import { useNavigate } from "react-router";
+
+const workerPool = new WorkerPool(3);
+
+interface ChatProps {
+    text: string;
+    setText: (text: string) => void;
+    selectedFiles: File[];
+    setSelectedFiles: (selectedFiles: File[]) => void;
+    isStreaming: boolean;
+    handleSubmit: (e: React.FormEvent<HTMLButtonElement>) => void;
+    handleCancel: (e: React.FormEvent<HTMLButtonElement>) => void;
+    handleKeyDown: (event: React.KeyboardEvent<HTMLTextAreaElement>) => void;
+}
+
+export function useChat(conversationId: ConversationID | undefined, isStreaming: boolean, initText = "", initFiles: File[] = []): ChatProps {
+    const [text, setText] = React.useState(initText);
+    const [selectedFiles, setSelectedFiles] = React.useState<File[]>(initFiles);
+    const navigate = useNavigate();
+
+    const startConversation = React.useCallback((cid: ConversationID) => {
+        const userMessage = createMessage(cid, "user", text, selectedFiles, true);
+        addUserMessage(userMessage)
+            .then(() => {
+                setText("");
+                setSelectedFiles([]);
+                workerPool.startStreaming(cid)
+                    .catch((error: unknown) => {
+                        handleAsyncError(error, "Failed to start the streaming");
+                    });
+            })
+            .catch((error: unknown) => {
+                handleAsyncError(error, "Failed to add the message");
+            });
+    }, [text, selectedFiles]);
+
+    const submitMessage = React.useCallback(() => {
+        if (text === "") return;
+        if (!conversationId) {
+            createConversation(true)
+                .then((cid) => {
+                    void navigate(`/${cid.toString()}`);
+                    startConversation(cid);
+                }).catch((error: unknown) => {
+                    handleAsyncError(error, "Failed to create a new conversation");
+                });
+        } else {
+            startConversation(conversationId);
+        }
+    }, [text, conversationId, startConversation, navigate]);
+
+    const handleCancel = React.useCallback((e: React.FormEvent<HTMLButtonElement>) => {
+        e.preventDefault();
+        if (conversationId) {
+            // console.log("Call abort streaming of the worker pool");
+            workerPool.abortStreaming(conversationId)
+                .catch((error: unknown) => {
+                    handleAsyncError(error, "Failed to abort the conversation");
+                });
+        }
+    }, [conversationId]);
+
+    const handleSubmit = React.useCallback((e: React.FormEvent<HTMLButtonElement>) => {
+        e.preventDefault();
+        submitMessage();
+    }, [submitMessage]);
+
+    const handleKeyDown = React.useCallback((event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        // Shift+Enter break the line otherwise it send the message
+        if (event.key === "Enter" && !event.shiftKey) {
+            event.preventDefault();
+            submitMessage();
+        }
+    }, [submitMessage]);
+
+    return { text, setText, selectedFiles, setSelectedFiles, isStreaming, handleSubmit, handleCancel, handleKeyDown }
+}
