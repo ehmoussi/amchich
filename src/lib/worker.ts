@@ -77,18 +77,36 @@ async function streamAnswer(conversationId: ConversationID, signal: AbortSignal)
         // 6. Increment the usage of the model
         await incrementUsageCount(model.name);
         // 7. Streaming chunk by chunk the answer
+        const openTag = "<think>";
+        const closeTag = "</think>";
+        let isThinking = false;
         let buffer = "";
         for await (const chunk of response) {
             if (chunk.choices[0].delta.content)
                 buffer += chunk.choices[0].delta.content;
             if (buffer.length > _BUFFER_STREAMING_SIZE) {
-                message.content.text += buffer;
+                if (buffer.includes(openTag)) {
+                    isThinking = true;
+                    message.content.thinking = "";
+                    buffer = buffer.replace(openTag, "");
+                }
+                else if (buffer.includes(closeTag)) {
+                    isThinking = false;
+                    const [thinking, text] = buffer.split(closeTag);
+                    buffer = text;
+                    message.content.thinking += thinking;
+                }
+                if (isThinking) message.content.thinking += buffer;
+                else message.content.text += buffer;
                 await updateStreamingMessage(message);
                 buffer = "";
             }
         }
         if (buffer.length > 0) {
-            message.content.text += buffer;
+            if (buffer.includes(openTag)) { isThinking = true; message.content.thinking = ""; }
+            else if (buffer.includes(closeTag)) isThinking = false;
+            if (isThinking) message.content.thinking += buffer;
+            else message.content.text += buffer;
             await updateStreamingMessage(message);
         }
     } catch (error) {
@@ -109,3 +127,26 @@ async function streamAnswer(conversationId: ConversationID, signal: AbortSignal)
         await updateFilesContentOfMessages(filesContentByMessage);
     }
 }
+
+
+
+export function extractThinking(content: string): { thinking: string | undefined, text: string } {
+    const openTag = "<think>";
+    const closeTag = "</think>";
+    let thinking: string | undefined = undefined;
+    let text: string = "";
+    const indexOfStartThink = content.indexOf(openTag);
+    if (indexOfStartThink === -1)
+        text = content;
+    else {
+        const indexOfLastThink = content.indexOf(closeTag);
+        if (indexOfLastThink === -1) {
+            thinking = content.substring(indexOfStartThink + openTag.length);
+        }
+        else {
+            thinking = content.substring(indexOfStartThink + openTag.length, indexOfLastThink);
+            text = content.substring(indexOfLastThink + closeTag.length);
+        }
+    }
+    return { thinking, text };
+};
