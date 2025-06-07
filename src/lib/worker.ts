@@ -1,5 +1,7 @@
 import OpenAI from "openai";
-import { addAssistantMessageAndClean, createMessage, deleteStreamingMessage, getActiveLLMModel, getConversationMessages, incrementUsageCount, updateStreamingMessage, type ConversationID } from "./db";
+import { addAssistantMessageAndClean, createMessage, deleteStreamingMessage, getActiveLLMModel, getConversationMessages, incrementUsageCount, type MessageID, updateFilesContentOfMessages, updateStreamingMessage, type ConversationID } from "./db";
+import { readFilesAsXML } from "./files";
+
 
 const _BUFFER_STREAMING_SIZE = 30;
 
@@ -37,10 +39,18 @@ async function streamAnswer(conversationId: ConversationID, signal: AbortSignal)
     // 3. Retrieve the current messsages of the conversation 
     const conversationMessages = await getConversationMessages(conversationId);
     const messages = [];
+    const filesContentByMessage = new Map<MessageID, string>();
     for (const conversationMessage of conversationMessages) {
+        let content = conversationMessage.content.text;
+        if (conversationMessage.role === "user" && conversationMessage.content.files.metadata.length > 0) {
+            content += "\n\n";
+            const filesContent = await readFilesAsXML(conversationMessage.content.files.metadata);
+            content += filesContent;
+            filesContentByMessage.set(conversationMessage.id, filesContent);
+        }
         messages.push({
             role: conversationMessage.role,
-            content: conversationMessage.content.text
+            content: content,
         });
     }
     // 4. Define the appropriate client for the LLM provider
@@ -96,5 +106,6 @@ async function streamAnswer(conversationId: ConversationID, signal: AbortSignal)
             await deleteStreamingMessage(conversationId);
         }
         self.postMessage({ type: "finished" });
+        await updateFilesContentOfMessages(filesContentByMessage);
     }
 }

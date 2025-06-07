@@ -2,7 +2,7 @@ import { Paperclip } from "lucide-react";
 
 interface ChatFileTagsProps {
     selectedFiles: File[];
-    setSelectedFiles: (selectedFiles: File[]) => void;
+    setSelectedFiles?: (selectedFiles: File[]) => void;
 }
 
 export function ChatFileTags({ selectedFiles, setSelectedFiles }: ChatFileTagsProps) {
@@ -15,16 +15,18 @@ export function ChatFileTags({ selectedFiles, setSelectedFiles }: ChatFileTagsPr
                 >
                     <Paperclip size={14} className="text-muted-foreground" />
                     <span className="text-foreground">{file.name}</span>
-                    <button
-                        type="button"
-                        onClick={() => {
-                            const newFiles = selectedFiles.filter((_, i) => i !== index);
-                            setSelectedFiles(newFiles);
-                        }}
-                        className="text-muted-foreground hover:text-foreground ml-1"
-                    >
-                        ×
-                    </button>
+                    {setSelectedFiles &&
+                        <button
+                            type="button"
+                            onClick={() => {
+                                const newFiles = selectedFiles.filter((_, i) => i !== index);
+                                setSelectedFiles(newFiles);
+                            }}
+                            className="text-muted-foreground hover:text-foreground ml-1"
+                        >
+                            ×
+                        </button>
+                    }
                 </div>
             )
             )}

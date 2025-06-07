@@ -51,12 +51,14 @@ const EditingMessage = React.memo(function ({ message, setIsEditing }: { message
                                 variant="ghost"
                                 onClick={handleCancel}
                                 className="text-lg px-3 py-1 h-auto"
+                                aria-label="Cancel"
                             >
                                 Cancel
                             </Button>
                             <Button
                                 onClick={handleSubmit}
                                 className="bg-neutral-500 text-lg hover:bg-black text-white px-3 py-1 h-auto"
+                                aria-label="Submit"
                             >
                                 Submit
                             </Button>
@@ -91,9 +93,11 @@ export const UserMessage = React.memo(function UserMessage({ message }: { messag
         >
             <div
                 className="max-w-[95%] rounded-lg px-3 py-2 text-lg whitespace-pre-line self-end border border-neutral-500 bg-neutral-50 text-black"
-
             >
                 <MarkdownText>{message.content.text}</MarkdownText>
+                <div className="flex-1">
+                    <ChatFileTags selectedFiles={message.content.files.metadata} />
+                </div>
             </div>
             <div
                 className="flex gap-1 justify-end mt-1 opacity-70"
@@ -183,4 +187,3 @@ const MessagePagination = React.memo(function ({ message }: { message: UMessage 
         </>
     );
 });
-

@@ -245,18 +245,16 @@ export async function updateActiveMessage(oldActiveMessageId: MessageID, newActi
     });
 }
 
-// async function disableMessageId(messageId: MessageID): Promise<void> {
-//     let message = await amchichDB.messages.get(messageId);
-//     while (message !== undefined) {
-//         await amchichDB.messages.update(message.id, { isActive: false });
-//         if (message.nextMessageIds) {
-//             const nextMessages = await amchichDB.messages.bulkGet(message.nextMessageIds);
-//             message = nextMessages.find((m) => m?.isActive);
-//         } else {
-//             message = undefined;
-//         }
-//     }
-// }
+export async function updateFilesContentOfMessages(filesContentByMessage: Map<MessageID, string>): Promise<void> {
+    await amchichDB.messages.bulkUpdate(
+        Array.from(filesContentByMessage.entries()).map(([messageId, filesContent]) => {
+            return {
+                key: messageId,
+                changes: { "content.files.content": filesContent }
+            };
+        })
+    );
+}
 
 export async function getConversationMessages(conversationId: ConversationID): Promise<Message[]> {
     const messages: Message[] = [];
