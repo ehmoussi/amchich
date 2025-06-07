@@ -18,7 +18,7 @@ export function ChatForm() {
         return await isConversationStreaming(conversationId);
     }, [conversationId]) ?? false;
 
-    const { text, setText, selectedFiles, setSelectedFiles, handleSubmit, handleCancel, handleKeyDown } = useChat(conversationId, isStreaming);
+    const { text, setText, selectedFiles, setSelectedFiles, handleSubmit, handleCancel, handleKeyDown } = useChat(conversationId);
 
     const onClick = React.useCallback((e: React.FormEvent<HTMLButtonElement>) => {
         if (isStreaming)

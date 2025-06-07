@@ -46,7 +46,7 @@ interface BaseMessage {
 export interface AssistantMessage extends BaseMessage {
     role: "assistant";
     modelId: LLMID | undefined;
-    isActive: true;
+    isActive: boolean;
 }
 
 export interface UserMessage extends BaseMessage {
@@ -182,16 +182,101 @@ async function addMessage(message: Message): Promise<void> {
                 { nextMessageIds: [...(previousMessage.nextMessageIds ?? []), message.id] }
             );
         }
+        await amchichDB.conversations.update(conversation.id, { lastMessageId: message.id });
     }
     await amchichDB.messages.add(message);
 }
 
+export async function editUserMessage(message: UserMessage, newMessage: UserMessage): Promise<void> {
+    await amchichDB.transaction("rw", amchichDB.messages, amchichDB.conversations, async () => {
+        newMessage.previousMessageId = message.previousMessageId;
+        await amchichDB.messages.update(message.id, { isActive: false });
+        if (message.previousMessageId) {
+            await amchichDB.messages.update(message.previousMessageId, { nextMessageIds: add([newMessage.id]) });
+            await amchichDB.conversations.update(newMessage.conversationId, { lastMessageId: newMessage.id });
+        } else {
+            await amchichDB.conversations.update(newMessage.conversationId, { lastMessageId: newMessage.id, firstMessageIds: add([newMessage.id]) });
+        }
+        await amchichDB.messages.add(newMessage);
+    });
+}
+
+export async function getSiblings(message: UserMessage): Promise<MessageID[]> {
+    let siblings: MessageID[] = [];
+    await amchichDB.transaction("r", amchichDB.messages, amchichDB.conversations, async () => {
+        if (message.previousMessageId) {
+            const previousMessage = await amchichDB.messages.get(message.previousMessageId);
+            if (previousMessage) {
+                if (previousMessage.nextMessageIds) siblings = previousMessage.nextMessageIds;
+            } else {
+                throw new Error(`Can't find the previous message "${message.previousMessageId}"`);
+            }
+        } else {
+            const conversation = await amchichDB.conversations.get(message.conversationId);
+            if (conversation) {
+                siblings = conversation.firstMessageIds;
+            } else {
+                throw new Error(`Can't find the conversation "${message.conversationId}"`);
+            }
+        }
+    });
+    return siblings;
+}
+
+export async function updateActiveMessage(oldActiveMessageId: MessageID, newActiveMessageId: MessageID): Promise<void> {
+    await amchichDB.transaction("rw", amchichDB.messages, amchichDB.conversations, async () => {
+        await amchichDB.messages.update(oldActiveMessageId, { isActive: false });
+        await amchichDB.messages.update(newActiveMessageId, { isActive: true });
+        const newActiveMessage = await amchichDB.messages.get(newActiveMessageId);
+        let lastMessage = newActiveMessage;
+        while (lastMessage !== undefined) {
+            if (lastMessage.nextMessageIds) {
+                const nextMessages = await amchichDB.messages.bulkGet(lastMessage.nextMessageIds);
+                const message = nextMessages.find((m) => m?.isActive);
+                if (message) lastMessage = message;
+                else break;
+            } else {
+                break;
+            }
+        }
+        if (lastMessage) {
+            await amchichDB.conversations.update(lastMessage.conversationId, { lastMessageId: lastMessage.id });
+        }
+    });
+}
+
+// async function disableMessageId(messageId: MessageID): Promise<void> {
+//     let message = await amchichDB.messages.get(messageId);
+//     while (message !== undefined) {
+//         await amchichDB.messages.update(message.id, { isActive: false });
+//         if (message.nextMessageIds) {
+//             const nextMessages = await amchichDB.messages.bulkGet(message.nextMessageIds);
+//             message = nextMessages.find((m) => m?.isActive);
+//         } else {
+//             message = undefined;
+//         }
+//     }
+// }
 
 export async function getConversationMessages(conversationId: ConversationID): Promise<Message[]> {
-    return await amchichDB.messages
-        .where({ conversationId })
-        .filter((msg) => msg.isActive)
-        .sortBy("createdAt");
+    const messages: Message[] = [];
+    await amchichDB.transaction("r", amchichDB.messages, amchichDB.conversations, async () => {
+        const conversation = await amchichDB.conversations.get(conversationId);
+        if (conversation) {
+            const firstMessages = await amchichDB.messages.bulkGet(conversation.firstMessageIds);
+            let message = firstMessages.find((m) => m?.isActive);
+            while (message !== undefined) {
+                messages.push(message);
+                if (message.nextMessageIds) {
+                    const nextMessages = await amchichDB.messages.bulkGet(message.nextMessageIds);
+                    message = nextMessages.find((m) => m?.isActive);
+                } else {
+                    message = undefined;
+                }
+            }
+        }
+    });
+    return messages;
 }
 
 

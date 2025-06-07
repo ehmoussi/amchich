@@ -1,6 +1,6 @@
 import { WorkerPool } from "../lib/workerpool";
 import { handleAsyncError } from "../lib/utils";
-import { addUserMessage, createConversation, createMessage, type ConversationID } from "../lib/db";
+import { addUserMessage, createConversation, createMessage, editUserMessage, type ConversationID, type UserMessage as UMessage } from "../lib/db";
 import React from "react";
 import { useNavigate } from "react-router";
 
@@ -11,32 +11,44 @@ interface ChatProps {
     setText: (text: string) => void;
     selectedFiles: File[];
     setSelectedFiles: (selectedFiles: File[]) => void;
-    isStreaming: boolean;
     handleSubmit: (e: React.FormEvent<HTMLButtonElement>) => void;
     handleCancel: (e: React.FormEvent<HTMLButtonElement>) => void;
     handleKeyDown: (event: React.KeyboardEvent<HTMLTextAreaElement>) => void;
 }
 
-export function useChat(conversationId: ConversationID | undefined, isStreaming: boolean, initText = "", initFiles: File[] = []): ChatProps {
-    const [text, setText] = React.useState(initText);
-    const [selectedFiles, setSelectedFiles] = React.useState<File[]>(initFiles);
+export function useChat(conversationId: ConversationID | undefined, editedMessage: UMessage | undefined = undefined): ChatProps {
+    const [text, setText] = React.useState(editedMessage ? editedMessage.content.text : "");
+    const [selectedFiles, setSelectedFiles] = React.useState<File[]>(editedMessage ? editedMessage.content.files.metadata : []);
     const navigate = useNavigate();
+
+    const startStreamingAnswer = React.useCallback((cid: ConversationID) => {
+        setText("");
+        setSelectedFiles([]);
+        workerPool.startStreaming(cid)
+            .catch((error: unknown) => {
+                handleAsyncError(error, "Failed to start the streaming");
+            });
+    }, [setText, setSelectedFiles]);
 
     const startConversation = React.useCallback((cid: ConversationID) => {
         const userMessage = createMessage(cid, "user", text, selectedFiles, true);
-        addUserMessage(userMessage)
-            .then(() => {
-                setText("");
-                setSelectedFiles([]);
-                workerPool.startStreaming(cid)
-                    .catch((error: unknown) => {
-                        handleAsyncError(error, "Failed to start the streaming");
-                    });
-            })
-            .catch((error: unknown) => {
-                handleAsyncError(error, "Failed to add the message");
-            });
-    }, [text, selectedFiles]);
+        if (editedMessage)
+            editUserMessage(editedMessage, userMessage)
+                .then(() => {
+                    startStreamingAnswer(cid);
+                })
+                .catch((error: unknown) => {
+                    handleAsyncError(error, "Failed to edit the message");
+                });
+        else
+            addUserMessage(userMessage)
+                .then(() => {
+                    startStreamingAnswer(cid);
+                })
+                .catch((error: unknown) => {
+                    handleAsyncError(error, "Failed to add the message");
+                });
+    }, [text, selectedFiles, editedMessage, startStreamingAnswer]);
 
     const submitMessage = React.useCallback(() => {
         if (text === "") return;
@@ -77,5 +89,5 @@ export function useChat(conversationId: ConversationID | undefined, isStreaming:
         }
     }, [submitMessage]);
 
-    return { text, setText, selectedFiles, setSelectedFiles, isStreaming, handleSubmit, handleCancel, handleKeyDown }
+    return { text, setText, selectedFiles, setSelectedFiles, handleSubmit, handleCancel, handleKeyDown }
 }

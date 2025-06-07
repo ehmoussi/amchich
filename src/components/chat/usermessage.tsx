@@ -1,7 +1,7 @@
 import React from "react";
-import { isConversationStreaming, type UserMessage as UMessage } from "../../lib/db";
+import { getSiblings, isConversationStreaming, updateActiveMessage, type UserMessage as UMessage } from "../../lib/db";
 import { MarkdownText } from "../ui/markdowntext";
-import { Copy, Pencil } from "lucide-react";
+import { ChevronLeft, ChevronRight, Copy, Pencil } from "lucide-react";
 import { ChatTextarea } from "./chattextarea";
 import { useChat } from "@/hooks/usechat";
 import { Button } from "../ui/button";
@@ -10,7 +10,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { handleAsyncError } from "@/lib/utils";
 import { ChatSelectFiles } from "./chatselectfiles";
 
-function EditingMessage({ message, isStreaming, setIsEditing }: { message: UMessage, isStreaming: boolean, setIsEditing: (isEditing: boolean) => void }) {
+const EditingMessage = React.memo(function ({ message, setIsEditing }: { message: UMessage, setIsEditing: (isEditing: boolean) => void }) {
     const {
         text,
         setText,
@@ -18,12 +18,7 @@ function EditingMessage({ message, isStreaming, setIsEditing }: { message: UMess
         setSelectedFiles,
         handleSubmit,
         handleKeyDown
-    } = useChat(
-        message.conversationId,
-        isStreaming,
-        message.content.text,
-        message.content.files.metadata
-    );
+    } = useChat(message.conversationId, message);
 
     const handleCancel = React.useCallback(() => {
         setText(message.content.text);
@@ -71,7 +66,7 @@ function EditingMessage({ message, isStreaming, setIsEditing }: { message: UMess
             </div>
         </div>
     );
-}
+});
 
 export const UserMessage = React.memo(function UserMessage({ message }: { message: UMessage }) {
     const [isHovering, setIsHovering] = React.useState<boolean>(false);
@@ -84,11 +79,8 @@ export const UserMessage = React.memo(function UserMessage({ message }: { messag
 
     if (isEditing)
         return (
-            <div className="group flex flex-col"
-                onMouseEnter={() => { setIsHovering(!isStreaming) }}
-                onMouseLeave={() => { setIsHovering(false) }}
-            >
-                < EditingMessage message={message} isStreaming={isStreaming} setIsEditing={setIsEditing} />
+            <div className="group flex flex-col">
+                <EditingMessage message={message} setIsEditing={setIsEditing} />
             </div >
         );
 
@@ -127,7 +119,68 @@ export const UserMessage = React.memo(function UserMessage({ message }: { messag
                 >
                     <Pencil size={16} />
                 </button>
+                <MessagePagination message={message} />
             </div>
         </div >
     );
 });
+
+
+
+const MessagePagination = React.memo(function ({ message }: { message: UMessage }) {
+    const siblings = useLiveQuery(async () => {
+        return await getSiblings(message);
+    }, [message]);
+
+    const currentPage = siblings?.findIndex((mid) => mid === message.id);
+    const nbPages = siblings?.length;
+
+    const moveToPreviousMessage = React.useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+        e.preventDefault();
+        if (currentPage !== undefined && siblings) {
+            updateActiveMessage(message.id, siblings[currentPage - 1])
+                .catch((error: unknown) => {
+                    handleAsyncError(error, "Failed to move to the previous message");
+                });
+        }
+    }, [siblings, currentPage, message.id]);
+
+    const moveToNextMessage = React.useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+        console.log("moveToNextMessage", currentPage, siblings);
+        e.preventDefault();
+        if (currentPage !== undefined && siblings) {
+            updateActiveMessage(message.id, siblings[currentPage + 1])
+                .catch((error: unknown) => {
+                    handleAsyncError(error, "Failed to move to the next message");
+                });
+        }
+    }, [siblings, currentPage, message.id]);
+
+    if (siblings === undefined || currentPage === undefined || nbPages === undefined) return;
+
+    const isPreviousDisabled = currentPage <= 0;
+    const isNextDisabled = currentPage >= (siblings.length - 1);
+
+    return (
+        <>
+            <button
+                type="button"
+                disabled={isPreviousDisabled}
+                onClick={moveToPreviousMessage}
+                className={`p-1 rounded ${isPreviousDisabled ? "opacity-50 cursor-not-allowed" : "hover:bg-black/10"}`}
+                aria-label="Previous message">
+                <ChevronLeft size={16} />
+            </button>
+            <span>{currentPage + 1} / {nbPages}</span>
+            <button
+                type="button"
+                disabled={isNextDisabled}
+                onClick={moveToNextMessage}
+                className={`p-1 rounded ${isNextDisabled ? "opacity-50 cursor-not-allowed" : "hover:bg-black/10"}`}
+                aria-label="Next message">
+                <ChevronRight size={16} />
+            </button >
+        </>
+    );
+});
+
