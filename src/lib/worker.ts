@@ -62,12 +62,21 @@ async function streamAnswer(conversationId: ConversationID, signal: AbortSignal)
             apiKey: "ollama",
             dangerouslyAllowBrowser: true,
         });
-    else
+    else if (model.provider === "OpenAI")
         client = new OpenAI({
             baseURL: "http://localhost:3001/api/v1/openai",
-            apiKey: "dummy",
+            apiKey: "openai",
             dangerouslyAllowBrowser: true,
         });
+    else if (model.provider === "OpenRouter") {
+        client = new OpenAI({
+            baseURL: "http://localhost:3001/api/v1/openrouter",
+            apiKey: "openrouter",
+            dangerouslyAllowBrowser: true,
+        })
+    }
+    else
+        throw new Error(`Unknown provider:${model.provider}`);
     try {
         // 5. Start the streaming of the assistant answer
         const response = await client.chat.completions.create({

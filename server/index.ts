@@ -5,6 +5,7 @@ import { env } from "hono/adapter";
 import { proxy } from "hono/proxy";
 
 const OPENAI_URL = "https://api.openai.com/v1"
+const OPENROUTER_URL = "https://openrouter.ai/api/v1"
 const port = 3001;
 const app = new Hono();
 
@@ -36,6 +37,13 @@ app.all("/api/v1/openai/:p1", async (c) => {
     return proxyOpenAiReq(c, url, apiKey);
 });
 
+app.all("/api/v1/openrouter/:p1", async (c) => {
+    const { OPENROUTER_API_KEY: apiKey } = env<{ OPENROUTER_API_KEY: string }>(c);
+    const p1 = c.req.param("p1");
+    const url = `${OPENROUTER_URL}/${p1}`;
+    return proxyOpenAiReq(c, url, apiKey);
+});
+
 app.get("/api/v1/openai/organization/:p1", async (c) => {
     const { OPENAI_ADMIN_KEY: apiKey } = env<{ OPENAI_ADMIN_KEY: string }>(c);
     const p1 = c.req.param("p1");
@@ -50,6 +58,14 @@ app.all("/api/v1/openai/:p1/:p2", async (c) => {
     const p1 = c.req.param("p1");
     const p2 = c.req.param("p2");
     const url = `${OPENAI_URL}/${p1}/${p2}`;
+    return proxyOpenAiReq(c, url, apiKey);
+});
+
+app.all("/api/v1/openrouter/:p1/:p2", async (c) => {
+    const { OPENROUTER_API_KEY: apiKey } = env<{ OPENROUTER_API_KEY: string }>(c);
+    const p1 = c.req.param("p1");
+    const p2 = c.req.param("p2");
+    const url = `${OPENROUTER_URL}/${p1}/${p2}`;
     return proxyOpenAiReq(c, url, apiKey);
 });
 

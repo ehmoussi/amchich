@@ -60,7 +60,7 @@ export type Message = AssistantMessage | UserMessage;
 
 
 export type LLMID = string;
-export type LLMProvider = "Ollama" | "OpenAI";
+export type LLMProvider = "Ollama" | "OpenAI" | "OpenRouter";
 
 export interface LLMModel {
     name: LLMID;

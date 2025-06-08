@@ -12,6 +12,10 @@ export async function updateAvailableModels(signal: AbortSignal) {
     for (const name of openaiModelNames) {
         models.push(createModel(name, "OpenAI"));
     }
+    const openRouterModelNames = await fetchOpenRouterModels(signal);
+    for (const name of openRouterModelNames) {
+        models.push(createModel(name, "OpenRouter"));
+    }
     await setModels(models);
 }
 
@@ -41,6 +45,21 @@ async function fetchOpenAiModels(signal: AbortSignal): Promise<LLMID[]> {
     for await (const model of models) {
         if (model.owned_by === "system")
             names.push(model.id);
+    }
+    return names;
+}
+
+
+async function fetchOpenRouterModels(signal: AbortSignal): Promise<LLMID[]> {
+    const client = new OpenAI({
+        baseURL: "http://localhost:3001/api/v1/openrouter",
+        apiKey: "dummy",
+        dangerouslyAllowBrowser: true,
+    });
+    const names: LLMID[] = [];
+    const models = await client.models.list({ signal: signal });
+    for await (const model of models) {
+        names.push(model.id);
     }
     return names;
 }
