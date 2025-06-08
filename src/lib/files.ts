@@ -20,10 +20,16 @@ async function readFileAsXML(index: number, file: File): Promise<string> {
         const reader = new FileReader();
         return await new Promise((resolve) => {
             reader.onloadend = () => {
-                if (reader.result !== null)
-                    resolve(reader.result.toString());
-                else
-                    resolve("");
+                let buffer = "";
+                if (reader.result !== null) {
+                    if (reader.result instanceof ArrayBuffer) {
+                        const decoder = new TextDecoder();
+                        buffer = decoder.decode(reader.result);
+                    } else {
+                        buffer = reader.result;
+                    }
+                }
+                resolve(buffer);
             };
             reader.readAsText(file);
         });

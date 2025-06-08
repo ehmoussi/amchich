@@ -137,7 +137,7 @@ const CopyButton = React.memo(function ({ text }: { text: string }) {
             type="button"
             onClick={() => {
                 navigator.clipboard.writeText(text)
-                    .then(() => setIsFinishedCopying(true))
+                    .then(() => { setIsFinishedCopying(true); })
                     .catch((error: unknown) => {
                         handleAsyncError(error, "Failed to copy in the clipboard");
                     })
@@ -159,7 +159,7 @@ const MessagePagination = React.memo(function ({ message }: { message: UMessage 
     const siblings = useLiveQuery(async () => {
         try {
             return await getSiblings(message);
-        } catch (error: unknown) {
+        } catch {
             return [];
         }
     }, [message]);

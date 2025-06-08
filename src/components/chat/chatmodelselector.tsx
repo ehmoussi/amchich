@@ -3,7 +3,6 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrig
 import { setActiveLLMModel, getActiveLLMModel, type LLMID, type LLMModel, areModelsObsolete, type LLMProvider, getLLMModelsByProvider, getMostUsedLLMModels } from "../../lib/db";
 import { updateAvailableModels } from "../../lib/llmmodels";
 import React from "react";
-import { toast } from "sonner";
 import { Button } from "../ui/button";
 import { Check, Loader2, RefreshCcw } from "lucide-react";
 import { handleAsyncError } from "../../lib/utils";

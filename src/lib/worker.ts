@@ -140,7 +140,7 @@ export function extractThinking(content: string): { thinking: string | undefined
     const openTag = "<think>";
     const closeTag = "</think>";
     let thinking: string | undefined = undefined;
-    let text: string = "";
+    let text = "";
     const indexOfStartThink = content.indexOf(openTag);
     if (indexOfStartThink === -1)
         text = content;
