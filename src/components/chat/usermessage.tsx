@@ -133,7 +133,11 @@ export const UserMessage = React.memo(function UserMessage({ message }: { messag
 
 const MessagePagination = React.memo(function ({ message }: { message: UMessage }) {
     const siblings = useLiveQuery(async () => {
-        return await getSiblings(message);
+        try {
+            return await getSiblings(message);
+        } catch (error: unknown) {
+            return [];
+        }
     }, [message]);
 
     const currentPage = siblings?.findIndex((mid) => mid === message.id);

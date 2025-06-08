@@ -86,9 +86,7 @@ export function ChatModelSelector() {
             const modelsByProvider = await getLLMModelsByProvider(mostUsedModels);
             return { modelsByProvider, mostUsedModels };
         } catch (error) {
-            const msg = "Failed to get available models";
-            console.error(`${msg}:`, error);
-            toast.error(msg);
+            handleAsyncError(error, "Failed to get available models");
             return { modelsByProvider: new Map(), mostUsedModels: [] };
         }
     }, []);
