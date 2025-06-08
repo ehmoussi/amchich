@@ -83,6 +83,7 @@ async function streamAnswer(conversationId: ConversationID, signal: AbortSignal)
             model: model.name,
             messages: messages,
             stream: true,
+            max_completion_tokens: 2000,
         }, { signal: signal });
         // 6. Increment the usage of the model
         await incrementUsageCount(model.name);
