@@ -1,6 +1,7 @@
 import OpenAI from "openai";
-import { addAssistantMessageAndClean, createMessage, deleteStreamingMessage, getActiveLLMModel, getConversationMessages, incrementUsageCount, type MessageID, updateFilesContentOfMessages, updateStreamingMessage, type ConversationID } from "./db";
+import { addAssistantMessageAndClean, createMessage, deleteStreamingMessage, getActiveLLMModel, getConversationMessages, incrementUsageCount, type MessageID, updateFilesContentOfMessages, updateStreamingMessage, type ConversationID, updateConversationTitle } from "./db";
 import { readFilesAsXML } from "./files";
+import { generateTitle } from "./titlegenerator";
 
 
 const _BUFFER_STREAMING_SIZE = 30;
@@ -116,15 +117,20 @@ async function streamAnswer(conversationId: ConversationID, signal: AbortSignal)
             throw error;
     } finally {
         if (message.content.text !== "") {
-            // TODO: 8. Update title of the conversation
-            // 9. Save in the db the answer and clean the streaming message
+            // 8. Save in the db the answer and clean the streaming message
             await addAssistantMessageAndClean(message);
+            await updateFilesContentOfMessages(filesContentByMessage);
+            // 9. Update title of the conversation
+            if (messages.length === 1) {
+                const title = await generateTitle(conversationMessages, model);
+                if (title)
+                    await updateConversationTitle(conversationId, title);
+            }
         } else {
             // 8. Clean the streaming message
             await deleteStreamingMessage(conversationId);
         }
         self.postMessage({ type: "finished" });
-        await updateFilesContentOfMessages(filesContentByMessage);
     }
 }
 
