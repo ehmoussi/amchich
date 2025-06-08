@@ -60,7 +60,7 @@ function ExpenseDisplay() {
     return (
         <div className="flex flex-col">
             <span>Total (OpenAI) ({_MONTHS[now.getMonth()]}): {openAISpent.toPrecision(2)} $</span>
-            <span>Total (OpenRouter) ({_MONTHS[now.getMonth()]}): {openRouterSpent.toPrecision(2)} $</span>
+            <span>Total (OpenRouter): {openRouterSpent.toPrecision(2)} $</span>
         </div>
     );
 }
