@@ -2,7 +2,8 @@ import { WorkerPool } from "../lib/workerpool";
 import { handleAsyncError } from "../lib/utils";
 import { addUserMessage, createConversation, createMessage, editUserMessage, type ConversationID, type UserMessage as UMessage } from "../lib/db";
 import React from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
+import { MAX_TOKENS } from "../components/chat/chatformoptions";
 
 const workerPool = new WorkerPool(3);
 
@@ -19,7 +20,17 @@ interface ChatProps {
 export function useChat(conversationId: ConversationID | undefined, editedMessage: UMessage | undefined = undefined): ChatProps {
     const [text, setText] = React.useState(editedMessage ? editedMessage.content.text : "");
     const [selectedFiles, setSelectedFiles] = React.useState<File[]>(editedMessage ? editedMessage.content.files.metadata : []);
+    const [searchParams] = useSearchParams();
     const navigate = useNavigate();
+
+    const maxTokens = searchParams.get("maxTokens");
+    if (maxTokens) {
+        if (MAX_TOKENS.includes(maxTokens)) {
+            try {
+                workerPool.setMaxTokens(parseInt(maxTokens));
+            } catch (error: unknown) { console.error(error); }
+        }
+    };
 
     const startStreamingAnswer = React.useCallback((cid: ConversationID) => {
         setText("");

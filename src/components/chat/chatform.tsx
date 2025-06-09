@@ -8,6 +8,7 @@ import { useChat } from "@/hooks/usechat";
 import { ChatFileTags } from "./chatfiletags";
 import { useLiveQuery } from "dexie-react-hooks";
 import { ChatSelectFiles } from "./chatselectfiles";
+import { ChatFormOptions } from "./chatformoptions";
 
 
 export function ChatForm() {
@@ -26,6 +27,7 @@ export function ChatForm() {
         else
             handleSubmit(e);
     }, [isStreaming, handleSubmit, handleCancel]);
+
 
     return (
         <div
@@ -55,6 +57,7 @@ export function ChatForm() {
                     </Button>
                 </div>
             </div>
+            <ChatFormOptions />
         </div>
     );
 }

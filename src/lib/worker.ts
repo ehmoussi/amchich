@@ -9,7 +9,7 @@ const _BUFFER_STREAMING_SIZE = 30;
 let controller: AbortController | undefined;
 
 export type WorkerStreamingMessage =
-    | { type: "init", payload: { conversationId: ConversationID } }
+    | { type: "init", payload: { conversationId: ConversationID, maxTokens: number } }
     | { type: "finished" }
     | { type: "abort" };
 
@@ -18,8 +18,8 @@ self.onmessage = async function (event: MessageEvent<WorkerStreamingMessage>) {
     switch (event.data.type) {
         case "init": {
             controller = new AbortController();
-            const { conversationId } = event.data.payload;
-            await streamAnswer(conversationId, controller.signal);
+            const { conversationId, maxTokens } = event.data.payload;
+            await streamAnswer(conversationId, maxTokens, controller.signal);
             break;
         }
         case "abort":
@@ -30,7 +30,7 @@ self.onmessage = async function (event: MessageEvent<WorkerStreamingMessage>) {
     }
 }
 
-async function streamAnswer(conversationId: ConversationID, signal: AbortSignal): Promise<void> {
+async function streamAnswer(conversationId: ConversationID, maxTokens: number, signal: AbortSignal): Promise<void> {
     // 1. Retrieve the current LLM model
     const model = await getActiveLLMModel();
     if (!model) throw new Error(`Can't find an active LLM model`);
@@ -79,11 +79,12 @@ async function streamAnswer(conversationId: ConversationID, signal: AbortSignal)
         throw new Error(`Unknown provider:${model.provider}`);
     try {
         // 5. Start the streaming of the assistant answer
+        console.log("maxTokens:", maxTokens);
         const response = await client.chat.completions.create({
             model: model.name,
             messages: messages,
             stream: true,
-            max_completion_tokens: 2000,
+            max_completion_tokens: maxTokens,
         }, { signal: signal });
         // 6. Increment the usage of the model
         await incrementUsageCount(model.name);

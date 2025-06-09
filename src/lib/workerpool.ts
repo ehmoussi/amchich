@@ -17,9 +17,14 @@ export class WorkerPool {
     private capacity = 3;
     private maxIdleWorkerTime = 10 * 60 * 1000;
     private cleanupInterval: NodeJS.Timeout | undefined;
+    private maxTokens = 2000;
 
     public constructor(capacity: number) {
         this.capacity = capacity;
+    }
+
+    public setMaxTokens(maxTokens: number) {
+        this.maxTokens = maxTokens;
     }
 
     private startCleanupInterval(): void {
@@ -90,7 +95,7 @@ export class WorkerPool {
         workerState.conversationId = conversationId;
         workerState.lastActivity = new Date();
         await deleteStreamingMessage(conversationId);
-        workerState.worker.postMessage({ type: "init", payload: { conversationId } });
+        workerState.worker.postMessage({ type: "init", payload: { conversationId, maxTokens: this.maxTokens } });
     }
 
     private async addWaitingMessage(conversationId: ConversationID): Promise<void> {
