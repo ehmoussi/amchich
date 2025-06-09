@@ -29,7 +29,7 @@ export function ChatForm() {
 
     return (
         <div
-            className="border border-input bg-background focus-within:ring-ring/10 relative mx-6 mb-6 rounded-[10px] focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-0">
+            className="max-w-[65rem] border border-input bg-background focus-within:ring-ring/10 relative mx-6 mb-6 rounded-[10px] focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-0">
             <div className="flex items-end gap-2 p-3">
                 <ChatSelectFiles setSelectedFiles={setSelectedFiles} />
                 <div className="flex-1">

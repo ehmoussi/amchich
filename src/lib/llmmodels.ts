@@ -91,19 +91,14 @@ export async function getOpenAIExpense(): Promise<number> {
     return totalSpent;
 }
 
-type Key = {
-    data: {
-        label: string;
-        usage: number; // Number of credits used
-        limit: number | null; // Credit limit for the key, or null if unlimited
-        is_free_tier: boolean; // Whether the user has paid for credits before
-    };
-};
 
-export async function getOpenRouterExpense(): Promise<number> {
-    const response = await fetch("http://localhost:3001/api/v1/openrouter/auth/key", {
+export async function getOpenRouterExpense(): Promise<{ usage: number, total: number }> {
+    const response = await fetch("http://localhost:3001/api/v1/openrouter/credits", {
         method: "GET",
     });
-    const data: Key = await response.json();
-    return data.data.usage;
+    const data = await response.json();
+    return {
+        usage: data.data.total_usage,
+        total: data.data.total_credits
+    };
 }

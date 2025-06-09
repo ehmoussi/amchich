@@ -77,7 +77,7 @@ interface ModelsInfo {
     mostUsedModels: LLMModel[];
 }
 
-export function ChatModelSelector() {
+export function ModelSelector() {
     const [showAutoUpdateSuccess, setShowAutoUpdateSuccess] = React.useState<boolean>(false);
     const modelsInfo = useLiveQuery(async (): Promise<ModelsInfo> => {
         try {
