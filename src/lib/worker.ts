@@ -1,5 +1,4 @@
-import OpenAI from "openai";
-import { addAssistantMessageAndClean, createMessage, deleteStreamingMessage, getActiveLLMModel, getConversationMessages, incrementUsageCount, type MessageID, updateFilesContentOfMessages, updateStreamingMessage, type ConversationID, updateConversationTitle } from "./db";
+import { addAssistantMessageAndClean, createMessage, deleteStreamingMessage, getActiveLLMModel, getConversationMessages, incrementUsageCount, type MessageID, updateFilesContentOfMessages, updateStreamingMessage, type ConversationID, updateConversationTitle, type Role, type LLMModel, type AssistantMessage } from "./db";
 import { readFilesAsXML } from "./files";
 import { generateTitle } from "./titlegenerator";
 
@@ -54,72 +53,61 @@ async function streamAnswer(conversationId: ConversationID, maxTokens: number, s
             content: content,
         });
     }
-    // 4. Define the appropriate client for the LLM provider
-    let client: OpenAI;
-    if (model.provider === "Ollama")
-        client = new OpenAI({
-            baseURL: "http://localhost:11434/v1/",
-            apiKey: "ollama",
-            dangerouslyAllowBrowser: true,
-        });
-    else if (model.provider === "OpenAI")
-        client = new OpenAI({
-            baseURL: "http://localhost:3001/api/v1/openai",
-            apiKey: "openai",
-            dangerouslyAllowBrowser: true,
-        });
-    else if (model.provider === "OpenRouter") {
-        client = new OpenAI({
-            baseURL: "http://localhost:3001/api/v1/openrouter",
-            apiKey: "openrouter",
-            dangerouslyAllowBrowser: true,
-        })
-    }
-    else
-        throw new Error(`Unknown provider:${model.provider}`);
+    // 4. Start the streaming of the assistant answer
     try {
-        // 5. Start the streaming of the assistant answer
-        console.log("maxTokens:", maxTokens);
-        const response = await client.chat.completions.create({
-            model: model.name,
-            messages: messages,
-            stream: true,
-            max_completion_tokens: maxTokens,
-        }, { signal: signal });
-        // 6. Increment the usage of the model
-        await incrementUsageCount(model.name);
-        // 7. Streaming chunk by chunk the answer
-        const openTag = "<think>";
-        const closeTag = "</think>";
-        let isThinking = false;
-        let buffer = "";
-        for await (const chunk of response) {
-            if (chunk.choices[0].delta.content)
-                buffer += chunk.choices[0].delta.content;
-            if (buffer.length > _BUFFER_STREAMING_SIZE) {
-                if (buffer.includes(openTag)) {
-                    isThinking = true;
-                    message.content.thinking = "";
-                    buffer = buffer.replace(openTag, "");
+        if (model.provider === "Ollama") {
+            let bufferThinking = "";
+            let bufferText = "";
+            for await (const chunk of fetchStreamingOllamaAnswer(messages, model, signal)) {
+                if (chunk.thinking) bufferThinking += chunk.thinking;
+                bufferText += chunk.text;
+                if (chunk.done || bufferThinking.length > _BUFFER_STREAMING_SIZE) {
+                    if (message.content.thinking === undefined) message.content.thinking = "";
+                    message.content.thinking += bufferThinking;
+                    bufferThinking = "";
+                    await updateStreamingMessage(message);
                 }
-                else if (buffer.includes(closeTag)) {
-                    isThinking = false;
-                    const [thinking, text] = buffer.split(closeTag);
-                    buffer = text;
-                    message.content.thinking += thinking;
+                if (chunk.done || bufferText.length > _BUFFER_STREAMING_SIZE) {
+                    message.content.text += bufferText;
+                    bufferText = "";
+                    await updateStreamingMessage(message);
                 }
-                if (isThinking) message.content.thinking += buffer;
-                else message.content.text += buffer;
-                await updateStreamingMessage(message);
-                buffer = "";
             }
+            await incrementUsageCount(model.name);
         }
-        if (buffer.length > 0) {
-            if (buffer.includes(openTag)) { isThinking = true; message.content.thinking = ""; }
-            else if (buffer.includes(closeTag)) isThinking = false;
-            if (isThinking) message.content.thinking += buffer;
-            else message.content.text += buffer;
-            await updateStreamingMessage(message);
+        else if (model.provider === "OpenRouter") {
+            let bufferThinking = "";
+            let bufferText = "";
+            for await (const chunk of fetchStreamingOpenRouterAnswer(messages, model, maxTokens, signal)) {
+                if (chunk.thinking) bufferThinking += chunk.thinking;
+                bufferText += chunk.text;
+                if (chunk.done || bufferThinking.length > _BUFFER_STREAMING_SIZE) {
+                    if (message.content.thinking === undefined) message.content.thinking = "";
+                    message.content.thinking += bufferThinking;
+                    bufferThinking = "";
+                    await updateStreamingMessage(message);
+                }
+                if (chunk.done || bufferText.length > _BUFFER_STREAMING_SIZE) {
+                    message.content.text += bufferText;
+                    bufferText = "";
+                    await updateStreamingMessage(message);
+                }
+            }
+            await incrementUsageCount(model.name);
+        }
+        else if (model.provider === "OpenAI") {
+            let buffer = "";
+            for await (const chunk of fetchStreamingOpenAIAnswer(messages, model, maxTokens, signal)) {
+                buffer += chunk.text;
+                if (chunk.done || buffer.length > _BUFFER_STREAMING_SIZE) {
+                    message.content.text += buffer;
+                    buffer = "";
+                    await updateStreamingMessage(message);
+                }
+            }
+            await incrementUsageCount(model.name);
+        } else {
+            console.error(`Unknown provider: ${model.provider}`);
         }
     } catch (error) {
         if (signal.aborted || (error instanceof DOMException && error.name === "AbortError"))
@@ -128,17 +116,17 @@ async function streamAnswer(conversationId: ConversationID, maxTokens: number, s
             throw error;
     } finally {
         if (message.content.text !== "") {
-            // 8. Save in the db the answer and clean the streaming message
+            // 5. Save in the db the answer and clean the streaming message
             await addAssistantMessageAndClean(message);
             await updateFilesContentOfMessages(filesContentByMessage);
-            // 9. Update title of the conversation
+            // 6. Update title of the conversation
             if (messages.length === 1) {
                 const title = await generateTitle(conversationMessages, model);
                 if (title)
                     await updateConversationTitle(conversationId, title);
             }
         } else {
-            // 8. Clean the streaming message
+            // 5. Clean the streaming message
             await deleteStreamingMessage(conversationId);
         }
         self.postMessage({ type: "finished" });
@@ -146,24 +134,163 @@ async function streamAnswer(conversationId: ConversationID, maxTokens: number, s
 }
 
 
+interface OllamaMessage {
+    role: Role;
+    content: string;
+    thinking?: string;
+}
 
-export function extractThinking(content: string): { thinking: string | undefined, text: string } {
-    const openTag = "<think>";
-    const closeTag = "</think>";
-    let thinking: string | undefined = undefined;
-    let text = "";
-    const indexOfStartThink = content.indexOf(openTag);
-    if (indexOfStartThink === -1)
-        text = content;
-    else {
-        const indexOfLastThink = content.indexOf(closeTag);
-        if (indexOfLastThink === -1) {
-            thinking = content.substring(indexOfStartThink + openTag.length);
-        }
-        else {
-            thinking = content.substring(indexOfStartThink + openTag.length, indexOfLastThink);
-            text = content.substring(indexOfLastThink + closeTag.length);
+async function* fetchStreamingOllamaAnswer(messages: OllamaMessage[], model: LLMModel, signal: AbortSignal): AsyncGenerator<{ text: string, thinking?: string, done: boolean }> {
+    const response = await fetch("http://localhost:11434/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            model: model.name,
+            messages: messages,
+            stream: true,
+            think: true,
+        }),
+        signal,
+    });
+    const reader = response.body?.getReader();
+    if (!reader) {
+        throw new Error("Can't read the body of the answer");
+    }
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer = decoder.decode(value, { stream: true });
+        try {
+            const chunk = JSON.parse(buffer);
+            yield { text: chunk.message.content, thinking: chunk.message.thinking, done: chunk.done };
+            if (chunk.done) break;
+        } catch { // Ignore the errors
         }
     }
-    return { thinking, text };
-};
+}
+
+interface OpenRouterMessage {
+    role: Role;
+    content: string;
+}
+
+async function* fetchStreamingOpenRouterAnswer(messages: OpenRouterMessage[], model: LLMModel, maxTokens: number, signal: AbortSignal): AsyncGenerator<{ text: string, thinking?: string, done: boolean }> {
+    const response = await fetch("http://localhost:3001/api/v1/openrouter/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            model: model.name,
+            messages: messages,
+            stream: true,
+            reasoning: {
+                exclude: false,
+            },
+            usage: {
+                include: true,// TODO: Store it
+            },
+            max_tokens: maxTokens,
+            user: "amchich",
+        }),
+        signal,
+    });
+    const reader = response.body?.getReader();
+    if (!reader) {
+        throw new Error("Can't read the body of the answer");
+    }
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+            yield { text: "", done: true };
+            break;
+        }
+        buffer += decoder.decode(value, { stream: true });
+        // Process each lines
+        while (true) {
+            const lineEndIndex = buffer.indexOf("\n");
+            if (lineEndIndex === -1) break; // No new line
+            const line = buffer.slice(0, lineEndIndex).trim();
+            // Extract data
+            if (line.startsWith("data: ")) {
+                const data = line.slice(6);
+                if (data === "[DONE]") yield { text: "", done: true };
+                try {
+                    const chunk = JSON.parse(data);
+                    yield { text: chunk.choices[0].delta.content, thinking: chunk.choices[0].delta.reasoning, done: false };
+                } catch { // Ignore the errors
+                }
+            }
+            // Process next line
+            buffer = buffer.slice(lineEndIndex + 1);
+        }
+    }
+}
+
+interface OpenAIMessage {
+    role: Role;
+    content: string;
+}
+
+async function* fetchStreamingOpenAIAnswer(messages: OpenAIMessage[], model: LLMModel, maxTokens: number, signal: AbortSignal): AsyncGenerator<{ text: string, thinking?: string, done: boolean }> {
+    // const reasoning = model.name.startsWith("o") ? { summary: "detailed" } : undefined;
+    const response = await fetch("http://localhost:3001/api/v1/openai/responses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            model: model.name,
+            input: messages,
+            stream: true,
+            // reasoning,
+            max_output_tokens: maxTokens,
+            user: "amchich",
+        }),
+        signal,
+    });
+    const reader = response.body?.getReader();
+    if (!reader) {
+        throw new Error("Can't read the body of the answer");
+    }
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+            yield { text: "", done: true };
+            break;
+        }
+        buffer += decoder.decode(value, { stream: true });
+        console.log("buffer:", buffer);
+        // Process each lines
+        while (true) {
+            let lineEndIndex = buffer.indexOf("\n");
+            if (lineEndIndex === -1) break; // No new line
+            let line = buffer.slice(0, lineEndIndex).trim();
+            // console.log("line:", line);
+            // Process next line
+            buffer = buffer.slice(lineEndIndex + 1);
+            if (line.startsWith("event: ")) {
+                const event = line.slice(7);
+                if (event === "response.completed")
+                    yield { text: "", done: true };
+                else if (event === "response.output_text.delta") {
+                    lineEndIndex = buffer.indexOf("\n");
+                    if (lineEndIndex === -1) break;
+                    line = buffer.slice(0, lineEndIndex).trim();
+                    // Extract data
+                    if (line.startsWith("data: ")) {
+                        const data = line.slice(6);
+                        console.log("data:", data);
+                        try {
+                            const chunk = JSON.parse(data);
+                            yield { text: chunk.delta, done: false }
+                        } catch { // Ignore the errors
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
