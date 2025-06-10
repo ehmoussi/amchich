@@ -1,4 +1,4 @@
-import { addAssistantMessageAndClean, createMessage, deleteStreamingMessage, getActiveLLMModel, getConversationMessages, incrementUsageCount, type MessageID, updateFilesContentOfMessages, updateStreamingMessage, type ConversationID, updateConversationTitle, type Role, type LLMModel, type AssistantMessage } from "./db";
+import { addAssistantMessageAndClean, createMessage, deleteStreamingMessage, getActiveLLMModel, getConversationMessages, incrementUsageCount, type MessageID, updateFilesContentOfMessages, updateStreamingMessage, type ConversationID, updateConversationTitle, type Role, type LLMModel } from "./db";
 import { readFilesAsXML } from "./files";
 import { generateTitle } from "./titlegenerator";
 

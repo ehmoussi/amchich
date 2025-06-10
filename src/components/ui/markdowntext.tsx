@@ -1,11 +1,10 @@
 
-import type React from "react";
 import Markdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 
 export function MarkdownText({ children }: { children: string }) {
     const components = {
-        code(props) {
+        code(props: any) {
             const { children, className, node, ...rest } = props
             const match = /language-(\w+)/.exec(className || '')
             return match ? (
