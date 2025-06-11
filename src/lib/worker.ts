@@ -62,7 +62,7 @@ async function streamAnswer(conversationId: ConversationID, maxTokens: number, s
                 if (chunk.thinking) bufferThinking += chunk.thinking;
                 bufferText += chunk.text;
                 if (chunk.done || bufferThinking.length > _BUFFER_STREAMING_SIZE) {
-                    if (message.content.thinking === undefined) message.content.thinking = "";
+                    message.content.thinking ??= "";
                     message.content.thinking += bufferThinking;
                     bufferThinking = "";
                     await updateStreamingMessage(message);
@@ -82,7 +82,7 @@ async function streamAnswer(conversationId: ConversationID, maxTokens: number, s
                 if (chunk.thinking) bufferThinking += chunk.thinking;
                 bufferText += chunk.text;
                 if (chunk.done || bufferThinking.length > _BUFFER_STREAMING_SIZE) {
-                    if (message.content.thinking === undefined) message.content.thinking = "";
+                    message.content.thinking ??= "";
                     message.content.thinking += bufferThinking;
                     bufferThinking = "";
                     await updateStreamingMessage(message);
@@ -140,6 +140,14 @@ interface OllamaMessage {
     thinking?: string;
 }
 
+interface OllamaResponse {
+    done: boolean;
+    message: {
+        content: string;
+        thinking?: string;
+    };
+}
+
 async function* fetchStreamingOllamaAnswer(messages: OllamaMessage[], model: LLMModel, signal: AbortSignal): AsyncGenerator<{ text: string, thinking?: string, done: boolean }> {
     const response = await fetch("http://localhost:11434/api/chat", {
         method: "POST",
@@ -163,7 +171,7 @@ async function* fetchStreamingOllamaAnswer(messages: OllamaMessage[], model: LLM
         if (done) break;
         buffer = decoder.decode(value, { stream: true });
         try {
-            const chunk = JSON.parse(buffer);
+            const chunk: OllamaResponse = JSON.parse(buffer) as OllamaResponse;
             yield { text: chunk.message.content, thinking: chunk.message.thinking, done: chunk.done };
             if (chunk.done) break;
         } catch { // Ignore the errors
@@ -174,6 +182,15 @@ async function* fetchStreamingOllamaAnswer(messages: OllamaMessage[], model: LLM
 interface OpenRouterMessage {
     role: Role;
     content: string;
+}
+
+interface OpenRouterResponse {
+    choices: {
+        delta: {
+            content: string;
+            reasoning?: string;
+        }
+    }[];
 }
 
 async function* fetchStreamingOpenRouterAnswer(messages: OpenRouterMessage[], model: LLMModel, maxTokens: number, signal: AbortSignal): AsyncGenerator<{ text: string, thinking?: string, done: boolean }> {
@@ -218,7 +235,7 @@ async function* fetchStreamingOpenRouterAnswer(messages: OpenRouterMessage[], mo
                 const data = line.slice(6);
                 if (data === "[DONE]") yield { text: "", done: true };
                 try {
-                    const chunk = JSON.parse(data);
+                    const chunk = JSON.parse(data) as OpenRouterResponse;
                     yield { text: chunk.choices[0].delta.content, thinking: chunk.choices[0].delta.reasoning, done: false };
                 } catch { // Ignore the errors
                 }
@@ -232,6 +249,10 @@ async function* fetchStreamingOpenRouterAnswer(messages: OpenRouterMessage[], mo
 interface OpenAIMessage {
     role: Role;
     content: string;
+}
+
+interface OpenAIResponse {
+    delta: string
 }
 
 async function* fetchStreamingOpenAIAnswer(messages: OpenAIMessage[], model: LLMModel, maxTokens: number, signal: AbortSignal): AsyncGenerator<{ text: string, thinking?: string, done: boolean }> {
@@ -262,13 +283,11 @@ async function* fetchStreamingOpenAIAnswer(messages: OpenAIMessage[], model: LLM
             break;
         }
         buffer += decoder.decode(value, { stream: true });
-        console.log("buffer:", buffer);
         // Process each lines
         while (true) {
             let lineEndIndex = buffer.indexOf("\n");
             if (lineEndIndex === -1) break; // No new line
             let line = buffer.slice(0, lineEndIndex).trim();
-            // console.log("line:", line);
             // Process next line
             buffer = buffer.slice(lineEndIndex + 1);
             if (line.startsWith("event: ")) {
@@ -282,9 +301,8 @@ async function* fetchStreamingOpenAIAnswer(messages: OpenAIMessage[], model: LLM
                     // Extract data
                     if (line.startsWith("data: ")) {
                         const data = line.slice(6);
-                        console.log("data:", data);
                         try {
-                            const chunk = JSON.parse(data);
+                            const chunk = JSON.parse(data) as OpenAIResponse;
                             yield { text: chunk.delta, done: false }
                         } catch { // Ignore the errors
                         }
