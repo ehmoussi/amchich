@@ -2,6 +2,8 @@
 import Markdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { CopyButton } from "../chat/copybutton";
+import remarkGfm from "remark-gfm";
+
 
 export function MarkdownText({ children }: { children: string }) {
     const components = {
@@ -26,6 +28,6 @@ export function MarkdownText({ children }: { children: string }) {
         }
     };
     return (
-        <Markdown components={components}>{children}</Markdown>
+        <Markdown remarkPlugins={[remarkGfm]} components={components}>{children}</Markdown>
     );
 }
