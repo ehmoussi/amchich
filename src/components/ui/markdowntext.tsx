@@ -1,6 +1,7 @@
 
 import Markdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { CopyButton } from "../chat/copybutton";
 
 export function MarkdownText({ children }: { children: string }) {
     const components = {
@@ -8,12 +9,15 @@ export function MarkdownText({ children }: { children: string }) {
             const { children, className, node, ...rest } = props
             const match = /language-(\w+)/.exec(className || '')
             return match ? (
-                <SyntaxHighlighter
-                    {...rest}
-                    PreTag="div"
-                    children={String(children).replace(/\n$/, '')}
-                    language={match[1]}
-                />
+                <div>
+                    <SyntaxHighlighter
+                        {...rest}
+                        PreTag="div"
+                        children={String(children).replace(/\n$/, '')}
+                        language={match[1]}
+                    />
+                    <CopyButton text={String(children).replace(/\n$/, '')} />
+                </div>
             ) : (
                 <code {...rest} className={className}>
                     {children}

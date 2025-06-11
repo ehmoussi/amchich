@@ -1,7 +1,7 @@
 import React from "react";
 import { getSiblings, isConversationStreaming, updateActiveMessage, type UserMessage as UMessage } from "../../lib/db";
 import { MarkdownText } from "../ui/markdowntext";
-import { Check, ChevronLeft, ChevronRight, Copy, Pencil } from "lucide-react";
+import { ChevronLeft, ChevronRight, Pencil } from "lucide-react";
 import { ChatTextarea } from "./chattextarea";
 import { useChat } from "@/hooks/usechat";
 import { Button } from "../ui/button";
@@ -9,6 +9,7 @@ import { ChatFileTags } from "./chatfiletags";
 import { useLiveQuery } from "dexie-react-hooks";
 import { handleAsyncError } from "@/lib/utils";
 import { ChatSelectFiles } from "./chatselectfiles";
+import { CopyButton } from "./copybutton";
 
 
 const EditingMessage = React.memo(function ({ message, setIsEditing }: { message: UMessage, setIsEditing: (isEditing: boolean) => void }) {
@@ -115,42 +116,6 @@ export const UserMessage = React.memo(function UserMessage({ message }: { messag
                 <MessagePagination message={message} />
             </div>
         </div >
-    );
-});
-
-
-const CopyButton = React.memo(function ({ text }: { text: string }) {
-    const [isFinishedCopying, setIsFinishedCopying] = React.useState(false);
-
-    // Clear the Finished copying after 1s
-    React.useEffect(() => {
-        let timeout: NodeJS.Timeout | undefined = undefined;
-        if (isFinishedCopying)
-            timeout = setTimeout(() => {
-                setIsFinishedCopying(false);
-            }, 1000);
-        return () => { if (timeout) clearTimeout(timeout) }
-    }, [isFinishedCopying]);
-
-    return (
-        <button
-            type="button"
-            onClick={() => {
-                navigator.clipboard.writeText(text)
-                    .then(() => { setIsFinishedCopying(true); })
-                    .catch((error: unknown) => {
-                        handleAsyncError(error, "Failed to copy in the clipboard");
-                    })
-            }}
-            className="p-1 rounded hover:bg-black/10"
-            aria-label="Copy message"
-        >
-            {
-                isFinishedCopying ?
-                    <Check size={16} /> :
-                    <Copy size={16} />
-            }
-        </button>
     );
 });
 
