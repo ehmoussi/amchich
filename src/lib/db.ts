@@ -3,7 +3,7 @@ import { add, Dexie, type Table } from "dexie";
 
 export type ConversationID = UUID;
 export type MessageID = UUID;
-type Role = "user" | "assistant";
+export type Role = "system" | "tool" | "user" | "assistant";
 
 
 export interface ConversationMeta {
