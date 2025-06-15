@@ -36,7 +36,7 @@ async function fetchOllamaModels(signal: AbortSignal): Promise<LLMID[]> {
 async function fetchOpenAiModels(signal: AbortSignal): Promise<LLMID[]> {
     const names: LLMID[] = [];
     const response = await fetch(
-        "http://localhost:3001/api/v1/openai/models",
+        `${import.meta.env.VITE_BACKEND_URL}/api/v1/openai/models`,
         { method: "GET", signal }
     );
     const data = await response.json();
@@ -50,7 +50,7 @@ async function fetchOpenAiModels(signal: AbortSignal): Promise<LLMID[]> {
 async function fetchOpenRouterModels(signal: AbortSignal): Promise<LLMID[]> {
     const names: LLMID[] = [];
     const response = await fetch(
-        "http://localhost:3001/api/v1/openrouter/models",
+        `${import.meta.env.VITE_BACKEND_URL}/api/v1/openrouter/models`,
         { method: "GET", signal }
     );
     const data = await response.json();
@@ -68,7 +68,7 @@ export async function getOpenAIExpense(): Promise<number> {
     const firstDayOfTheMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const startTime = Math.floor(firstDayOfTheMonth.getTime() / 1000);
     const response = await fetch(
-        `http://localhost:3001/api/v1/openai/organization/costs?start_time=${String(startTime)}&limit=${100}`,
+        `${import.meta.env.VITE_BACKEND_URL}/api/v1/openai/organization/costs?start_time=${String(startTime)}&limit=${100}`,
         { method: "GET", }
     );
     const data = await response.json();
@@ -83,7 +83,7 @@ export async function getOpenAIExpense(): Promise<number> {
 
 
 export async function getOpenRouterExpense(): Promise<{ usage: number, total: number }> {
-    const response = await fetch("http://localhost:3001/api/v1/openrouter/credits", {
+    const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/v1/openrouter/credits`, {
         method: "GET",
     });
     const data = await response.json();

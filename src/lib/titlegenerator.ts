@@ -10,7 +10,7 @@ export async function generateTitle(messages: Message[], model: LLMModel): Promi
 }
 
 async function generateWithOpenRouter(prompt: string): Promise<string | undefined> {
-    const response = await fetch("http://localhost:3001/api/v1/openrouter/chat/completions", {
+    const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/v1/openrouter/chat/completions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

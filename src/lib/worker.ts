@@ -194,7 +194,7 @@ interface OpenRouterResponse {
 }
 
 async function* fetchStreamingOpenRouterAnswer(messages: OpenRouterMessage[], model: LLMModel, maxTokens: number, signal: AbortSignal): AsyncGenerator<{ text: string, thinking?: string, done: boolean }> {
-    const response = await fetch("http://localhost:3001/api/v1/openrouter/chat/completions", {
+    const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/v1/openrouter/chat/completions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -257,7 +257,7 @@ interface OpenAIResponse {
 
 async function* fetchStreamingOpenAIAnswer(messages: OpenAIMessage[], model: LLMModel, maxTokens: number, signal: AbortSignal): AsyncGenerator<{ text: string, thinking?: string, done: boolean }> {
     // const reasoning = model.name.startsWith("o") ? { summary: "detailed" } : undefined;
-    const response = await fetch("http://localhost:3001/api/v1/openai/responses", {
+    const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/v1/openai/responses`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
