@@ -13,7 +13,6 @@ export function AppConversation() {
     return (
         <App>
             <ChatMessages />
-            <ChatForm />
         </App>);
 }
 
@@ -21,7 +20,6 @@ export function AppLandingPage() {
     return (
         <App>
             <LandingPage />
-            <ChatForm />
         </App>
     );
 }
@@ -32,15 +30,24 @@ function App({ children }: { children: React.ReactNode }) {
         <SidebarProvider defaultOpen={true}>
             <ConversationSideBar />
             <SidebarTrigger />
-            <div>
-                <ModelSelector />
-                <Expense />
-            </div>
-            <main className="ring-none mx-auto flex h-svh max-h-svh w-full max-w-[75rem] flex-col items-stretch border-none">
-                {children}
-                <Toaster richColors />
-            </main >
-        </SidebarProvider>
+            <main className="h-screen flex flex-col w-full max-w-[80rem]">
+                <div className="flex-1 overflow-auto">
+                    <div className="flex sticky inset-x-0 top-0 w-full bg-white z-10 mx-5 py-2 border-b">
+                        <div className="flex items-center ">
+                            <ModelSelector />
+                            <Expense />
+                        </div>
+                    </div>
+                    <div className="mx-5 ring-none  flex h-svh max-h-svh w-full max-w-[75rem] flex-col items-stretch border-none">
+                        {children}
+                        <Toaster richColors />
+                    </div>
+                </div>
+                <div className="sticky inset-x-0 bottom-0 w-full">
+                    <ChatForm className="max-w-[75rem] border border-input bg-background focus-within:ring-ring/10 mx-6 mb-6" />
+                </div>
+            </main>
+        </SidebarProvider >
     )
 }
 

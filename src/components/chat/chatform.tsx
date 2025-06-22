@@ -4,14 +4,15 @@ import { Button } from "../ui/button";
 import { ArrowUp, CircleStop } from "lucide-react";
 import { useParams } from "react-router";
 import { isConversationStreaming, type ConversationID } from "../../lib/db";
-import { useChat } from "@/hooks/usechat";
+import { useChat } from "../../hooks/usechat";
 import { ChatFileTags } from "./chatfiletags";
 import { useLiveQuery } from "dexie-react-hooks";
 import { ChatSelectFiles } from "./chatselectfiles";
 import { ChatFormOptions } from "./chatformoptions";
+import { cn } from "../../lib/utils";
 
 
-export function ChatForm() {
+export function ChatForm({ className }: { className?: string }) {
     const { conversationId } = useParams<{ conversationId: ConversationID }>();
 
     const isStreaming = useLiveQuery(async (): Promise<boolean> => {
@@ -30,9 +31,9 @@ export function ChatForm() {
 
 
     return (
-        <div
-            className="max-w-[65rem] border border-input bg-background focus-within:ring-ring/10 relative mx-6 mb-6 rounded-[10px] focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-0">
-            <div className="flex items-end gap-2 p-3">
+        <div className={cn(className)}>
+            {/* className="max-w-[75rem] border border-input bg-background focus-within:ring-ring/10 relative mx-6 mb-6 rounded-[10px] focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-0"> */}
+            <div className="flex gap-2 p-3">
                 <ChatSelectFiles setSelectedFiles={setSelectedFiles} />
                 <div className="flex-1">
                     <ChatTextarea
@@ -41,7 +42,7 @@ export function ChatForm() {
                         onChange={setText}
                         placeholder="Enter a message"
                         rows={2}
-                        className="w-full resize-none bg-transparent border-none outline-none text-lg placeholder:text-muted-foreground"
+                        className="w-full resize-none bg-transparent border-none outline-none text-sm placeholder:text-muted-foreground"
                     />
                     {selectedFiles.length > 0 && <ChatFileTags selectedFiles={selectedFiles} setSelectedFiles={setSelectedFiles} />}
                 </div>

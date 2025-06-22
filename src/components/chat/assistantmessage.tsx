@@ -10,7 +10,7 @@ export function AssistantMessage({ message }: { message: AMessage }) {
     return (
         <div className="group flex flex-col">
             <ScrollArea
-                className="max-w-[95%] rounded-md shadow-sm px-3 py-2 text-lg whitespace-pre-line self-start border-indigo-100 border text-black"
+                className="max-w-[95%] rounded-md shadow-sm px-3 py-2 text-sm whitespace-pre-line self-start border-indigo-100 border text-black"
             >
                 {
                     message.content.thinking &&
