@@ -5,7 +5,7 @@ import { updateAvailableModels } from "../../lib/llmmodels";
 import React from "react";
 import { Button } from "../ui/button";
 import { Check, Loader2, RefreshCcw } from "lucide-react";
-import { handleAsyncError } from "../../lib/utils";
+import { cn, handleAsyncError } from "../../lib/utils";
 import { useMounted } from "../../hooks/usemounted";
 
 const _SHOW_SUCCESS_DELAY = 1200; // How many ms the updated success message is displayed
@@ -77,7 +77,7 @@ interface ModelsInfo {
     mostUsedModels: LLMModel[];
 }
 
-export function ModelSelector() {
+export function ModelSelector({ className }: { className?: string }) {
     const [showAutoUpdateSuccess, setShowAutoUpdateSuccess] = React.useState<boolean>(false);
     const modelsInfo = useLiveQuery(async (): Promise<ModelsInfo> => {
         try {
@@ -154,7 +154,7 @@ export function ModelSelector() {
     }
 
     return (
-        <div className="flex gap-1">
+        <div className={cn("flex gap-1", className)}>
             <Select
                 value={currentModelId}
                 onValueChange={changeCurrentModelId}
@@ -169,7 +169,7 @@ export function ModelSelector() {
                         {
                             mostUsedModels.map((model) => {
                                 return (
-                                    <SelectItem key={model.name} value={model.name}>
+                                    <SelectItem key={model.name} value={model.name} className="text-xs">
                                         {model.name}
                                     </SelectItem>
                                 );

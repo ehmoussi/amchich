@@ -39,7 +39,7 @@ const EditingMessage = React.memo(function ({ message, setIsEditing }: { message
                             value={text}
                             placeholder="Enter a message"
                             rows={2}
-                            className="border border-neutral-100 w-full rounded-[10px] p-2 resize-none bg-transparent outline-none text-lg placeholder:text-muted-foreground"
+                            className="border border-neutral-100 w-full rounded-[10px] p-2 resize-none bg-transparent outline-none text-sm placeholder:text-muted-foreground"
                         />
                     </div>
                 </div>
@@ -52,14 +52,14 @@ const EditingMessage = React.memo(function ({ message, setIsEditing }: { message
                             <Button
                                 variant="ghost"
                                 onClick={handleCancel}
-                                className="text-lg px-3 py-1 h-auto"
+                                className="text-sm px-3 py-1 h-auto"
                                 aria-label="Cancel"
                             >
                                 Cancel
                             </Button>
                             <Button
                                 onClick={handleSubmit}
-                                className="bg-neutral-500 text-lg hover:bg-black text-white px-3 py-1 h-auto"
+                                className="bg-neutral-500 text-sm hover:bg-black text-white px-3 py-1 h-auto"
                                 aria-label="Submit"
                             >
                                 Submit
@@ -94,12 +94,14 @@ export const UserMessage = React.memo(function UserMessage({ message }: { messag
             onMouseLeave={() => { setIsHovering(false) }}
         >
             <div
-                className="max-w-[95%] rounded-lg px-3 py-2 text-lg whitespace-pre-line self-end border border-neutral-500 bg-neutral-50 text-black"
+                className="max-w-[95%] rounded-lg px-3 py-2 text-sm whitespace-pre-line self-end border border-neutral-500 bg-sidebar text-black"
             >
                 <MarkdownText>{message.content.text}</MarkdownText>
-                <div className="flex-1">
-                    <ChatFileTags selectedFiles={message.content.files.metadata} />
-                </div>
+                {message.content.files.metadata.length > 0 &&
+                    <div className="flex-1">
+                        <ChatFileTags selectedFiles={message.content.files.metadata} />
+                    </div>
+                }
             </div>
             <div
                 className="flex gap-1 justify-end mt-1 opacity-70"

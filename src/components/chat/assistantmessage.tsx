@@ -39,7 +39,7 @@ const ThinkingMessage = React.memo(function ({ thinking }: { thinking: string })
                     <span className="text-sm">Thinking ...</span>
                 </Button>
             </CollapsibleTrigger>
-            <CollapsibleContent className="max-w-[80%] rounded-md px-4 pb-6 self-start border-black-100 border text-sm">
+            <CollapsibleContent className="max-w-[80%] rounded-md px-4 pb-6 pt-4 self-start border-black-100 border text-sm">
                 {thinking}
             </CollapsibleContent>
         </Collapsible >
