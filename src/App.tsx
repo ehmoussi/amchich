@@ -74,7 +74,7 @@ function App({ children, ref, onScroll }: { children: React.ReactNode, ref?: Rea
                     <ChatForm className="max-w-[75rem] border border-input bg-background focus-within:ring-ring/10 mx-6 mb-6" />
                 </div>
             </main>
-        </SidebarProvider >
+        </SidebarProvider>
     )
 }
 

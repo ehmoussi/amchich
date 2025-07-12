@@ -8,6 +8,7 @@ interface ViteTypeOptions {
 
 interface ImportMetaEnv {
     readonly VITE_BACKEND_URL: string
+    readonly VITE_CLOUDFLARE_TEAM: string
     // more env variables...
 }
 

@@ -1,3 +1,4 @@
+import { getCloudflareToken } from "./cloudflaretoken";
 import { addAssistantMessageAndClean, createMessage, deleteStreamingMessage, getActiveLLMModel, getConversationMessages, incrementUsageCount, type MessageID, updateFilesContentOfMessages, updateStreamingMessage, type ConversationID, updateConversationTitle, type Role, type LLMModel } from "./db";
 import { readFilesAsXML } from "./files";
 import { generateTitle } from "./titlegenerator";
@@ -151,7 +152,9 @@ interface OllamaResponse {
 async function* fetchStreamingOllamaAnswer(messages: OllamaMessage[], model: LLMModel, signal: AbortSignal): AsyncGenerator<{ text: string, thinking?: string, done: boolean }> {
     const response = await fetch("http://localhost:11434/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+            "Content-Type": "application/json",
+        },
         body: JSON.stringify({
             model: model.name,
             messages: messages,
@@ -194,9 +197,13 @@ interface OpenRouterResponse {
 }
 
 async function* fetchStreamingOpenRouterAnswer(messages: OpenRouterMessage[], model: LLMModel, maxTokens: number, signal: AbortSignal): AsyncGenerator<{ text: string, thinking?: string, done: boolean }> {
+    const token = await getCloudflareToken();
     const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/v1/openrouter/chat/completions`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({
             model: model.name,
             messages: messages,
@@ -257,9 +264,13 @@ interface OpenAIResponse {
 
 async function* fetchStreamingOpenAIAnswer(messages: OpenAIMessage[], model: LLMModel, maxTokens: number, signal: AbortSignal): AsyncGenerator<{ text: string, thinking?: string, done: boolean }> {
     // const reasoning = model.name.startsWith("o") ? { summary: "detailed" } : undefined;
+    const token = await getCloudflareToken();
     const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/v1/openai/responses`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({
             model: model.name,
             input: messages,

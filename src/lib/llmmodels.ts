@@ -1,3 +1,4 @@
+import { getCloudflareToken } from "./cloudflaretoken";
 import { createModel, setModels, type LLMID, type LLMModel } from "./db";
 
 
@@ -34,10 +35,17 @@ async function fetchOllamaModels(signal: AbortSignal): Promise<LLMID[]> {
 
 
 async function fetchOpenAiModels(signal: AbortSignal): Promise<LLMID[]> {
+    const token = await getCloudflareToken();
     const names: LLMID[] = [];
     const response = await fetch(
         `${import.meta.env.VITE_BACKEND_URL}/api/v1/openai/models`,
-        { method: "GET", signal }
+        {
+            method: "GET",
+            headers: {
+                Authorization: `Bearer ${token}`,
+            },
+            signal
+        }
     );
     const data = await response.json();
     for (const model of data.data) {
@@ -48,10 +56,17 @@ async function fetchOpenAiModels(signal: AbortSignal): Promise<LLMID[]> {
 
 
 async function fetchOpenRouterModels(signal: AbortSignal): Promise<LLMID[]> {
+    const token = await getCloudflareToken();
     const names: LLMID[] = [];
     const response = await fetch(
         `${import.meta.env.VITE_BACKEND_URL}/api/v1/openrouter/models`,
-        { method: "GET", signal }
+        {
+            method: "GET",
+            headers: {
+                Authorization: `Bearer ${token}`,
+            },
+            signal
+        }
     );
     const data = await response.json();
     for (const model of data.data) {
@@ -64,12 +79,18 @@ async function fetchOpenRouterModels(signal: AbortSignal): Promise<LLMID[]> {
 
 
 export async function getOpenAIExpense(): Promise<number> {
+    const token = await getCloudflareToken();
     const now = new Date();
     const firstDayOfTheMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const startTime = Math.floor(firstDayOfTheMonth.getTime() / 1000);
     const response = await fetch(
         `${import.meta.env.VITE_BACKEND_URL}/api/v1/openai/organization/costs?start_time=${String(startTime)}&limit=${100}`,
-        { method: "GET", }
+        {
+            method: "GET",
+            headers: {
+                Authorization: `Bearer ${token}`,
+            },
+        }
     );
     const data = await response.json();
     let totalSpent = 0;
@@ -83,8 +104,12 @@ export async function getOpenAIExpense(): Promise<number> {
 
 
 export async function getOpenRouterExpense(): Promise<{ usage: number, total: number }> {
+    const token = await getCloudflareToken();
     const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/v1/openrouter/credits`, {
         method: "GET",
+        headers: {
+            Authorization: `Bearer ${token}`,
+        },
     });
     const data = await response.json();
     return {
