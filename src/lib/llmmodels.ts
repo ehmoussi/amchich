@@ -21,6 +21,7 @@ export async function updateAvailableModels(signal: AbortSignal) {
 
 async function fetchOllamaModels(signal: AbortSignal): Promise<LLMID[]> {
     const names: LLMID[] = [];
+    if (import.meta.env.PROD) return [];
     const response = await fetch("http://localhost:11434/api/tags", {
         method: "GET",
         signal
