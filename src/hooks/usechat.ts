@@ -4,8 +4,17 @@ import { addUserMessage, createConversation, createMessage, editUserMessage, typ
 import React from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { MAX_TOKENS } from "../components/chat/chatformoptions";
+import { getCloudflareToken } from "../lib/cloudflaretoken";
+import { toast } from "sonner";
 
-const workerPool = new WorkerPool(3);
+
+const cloudflareToken = getCloudflareToken();
+let workerPool: WorkerPool | undefined;
+if (cloudflareToken !== null) {
+    workerPool = new WorkerPool(3, cloudflareToken);
+} else {
+    toast.error("Failed to retrieve authentication informations");
+}
 
 interface ChatProps {
     text: string;
@@ -23,11 +32,13 @@ export function useChat(conversationId: ConversationID | undefined, editedMessag
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
 
+
     const maxTokens = searchParams.get("maxTokens");
     if (maxTokens) {
         if (MAX_TOKENS.includes(maxTokens)) {
             try {
-                workerPool.setMaxTokens(parseInt(maxTokens));
+                if (workerPool !== undefined)
+                    workerPool.setMaxTokens(parseInt(maxTokens));
             } catch (error: unknown) { console.error(error); }
         }
     };
@@ -35,6 +46,10 @@ export function useChat(conversationId: ConversationID | undefined, editedMessag
     const startStreamingAnswer = React.useCallback((cid: ConversationID) => {
         setText("");
         setSelectedFiles([]);
+        if (workerPool === undefined) {
+            toast.error("Failed to start the streaming");
+            return;
+        }
         workerPool.startStreaming(cid)
             .catch((error: unknown) => {
                 handleAsyncError(error, "Failed to start the streaming");
@@ -79,6 +94,10 @@ export function useChat(conversationId: ConversationID | undefined, editedMessag
     const handleCancel = React.useCallback((e: React.FormEvent<HTMLButtonElement>) => {
         e.preventDefault();
         if (conversationId) {
+            if (workerPool === undefined) {
+                toast.error("Failed to abort the conversation");
+                return;
+            }
             // console.log("Call abort streaming of the worker pool");
             workerPool.abortStreaming(conversationId)
                 .catch((error: unknown) => {

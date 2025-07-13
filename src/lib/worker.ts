@@ -1,4 +1,3 @@
-import { getCloudflareToken } from "./cloudflaretoken";
 import { addAssistantMessageAndClean, createMessage, deleteStreamingMessage, getActiveLLMModel, getConversationMessages, incrementUsageCount, type MessageID, updateFilesContentOfMessages, updateStreamingMessage, type ConversationID, updateConversationTitle, type Role, type LLMModel } from "./db";
 import { readFilesAsXML } from "./files";
 import { generateTitle } from "./titlegenerator";
@@ -9,7 +8,7 @@ const _BUFFER_STREAMING_SIZE = 30;
 let controller: AbortController | undefined;
 
 export type WorkerStreamingMessage =
-    | { type: "init", payload: { conversationId: ConversationID, maxTokens: number } }
+    | { type: "init", payload: { conversationId: ConversationID, maxTokens: number, cloudflareToken: string } }
     | { type: "finished" }
     | { type: "abort" };
 
@@ -18,8 +17,8 @@ self.onmessage = async function (event: MessageEvent<WorkerStreamingMessage>) {
     switch (event.data.type) {
         case "init": {
             controller = new AbortController();
-            const { conversationId, maxTokens } = event.data.payload;
-            await streamAnswer(conversationId, maxTokens, controller.signal);
+            const { conversationId, maxTokens, cloudflareToken } = event.data.payload;
+            await streamAnswer(conversationId, maxTokens, cloudflareToken, controller.signal);
             break;
         }
         case "abort":
@@ -30,7 +29,7 @@ self.onmessage = async function (event: MessageEvent<WorkerStreamingMessage>) {
     }
 }
 
-async function streamAnswer(conversationId: ConversationID, maxTokens: number, signal: AbortSignal): Promise<void> {
+async function streamAnswer(conversationId: ConversationID, maxTokens: number, cloudflareToken: string, signal: AbortSignal): Promise<void> {
     // 1. Retrieve the current LLM model
     const model = await getActiveLLMModel();
     if (!model) throw new Error(`Can't find an active LLM model`);
@@ -79,7 +78,7 @@ async function streamAnswer(conversationId: ConversationID, maxTokens: number, s
         else if (model.provider === "OpenRouter") {
             let bufferThinking = "";
             let bufferText = "";
-            for await (const chunk of fetchStreamingOpenRouterAnswer(messages, model, maxTokens, signal)) {
+            for await (const chunk of fetchStreamingOpenRouterAnswer(messages, model, maxTokens, cloudflareToken, signal)) {
                 if (chunk.thinking) bufferThinking += chunk.thinking;
                 bufferText += chunk.text;
                 if (chunk.done || bufferThinking.length > _BUFFER_STREAMING_SIZE) {
@@ -98,7 +97,7 @@ async function streamAnswer(conversationId: ConversationID, maxTokens: number, s
         }
         else if (model.provider === "OpenAI") {
             let buffer = "";
-            for await (const chunk of fetchStreamingOpenAIAnswer(messages, model, maxTokens, signal)) {
+            for await (const chunk of fetchStreamingOpenAIAnswer(messages, model, maxTokens, cloudflareToken, signal)) {
                 buffer += chunk.text;
                 if (chunk.done || buffer.length > _BUFFER_STREAMING_SIZE) {
                     message.content.text += buffer;
@@ -196,13 +195,12 @@ interface OpenRouterResponse {
     }[];
 }
 
-async function* fetchStreamingOpenRouterAnswer(messages: OpenRouterMessage[], model: LLMModel, maxTokens: number, signal: AbortSignal): AsyncGenerator<{ text: string, thinking?: string, done: boolean }> {
-    const token = await getCloudflareToken();
+async function* fetchStreamingOpenRouterAnswer(messages: OpenRouterMessage[], model: LLMModel, maxTokens: number, cloudflareToken: string, signal: AbortSignal): AsyncGenerator<{ text: string, thinking?: string, done: boolean }> {
     const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/v1/openrouter/chat/completions`, {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
+            Authorization: `Bearer ${cloudflareToken}`,
         },
         body: JSON.stringify({
             model: model.name,
@@ -262,14 +260,13 @@ interface OpenAIResponse {
     delta: string
 }
 
-async function* fetchStreamingOpenAIAnswer(messages: OpenAIMessage[], model: LLMModel, maxTokens: number, signal: AbortSignal): AsyncGenerator<{ text: string, thinking?: string, done: boolean }> {
+async function* fetchStreamingOpenAIAnswer(messages: OpenAIMessage[], model: LLMModel, maxTokens: number, cloudflareToken: string, signal: AbortSignal): AsyncGenerator<{ text: string, thinking?: string, done: boolean }> {
     // const reasoning = model.name.startsWith("o") ? { summary: "detailed" } : undefined;
-    const token = await getCloudflareToken();
     const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/v1/openai/responses`, {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
+            Authorization: `Bearer ${cloudflareToken}`,
         },
         body: JSON.stringify({
             model: model.name,

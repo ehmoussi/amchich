@@ -18,9 +18,11 @@ export class WorkerPool {
     private maxIdleWorkerTime = 10 * 60 * 1000;
     private cleanupInterval: NodeJS.Timeout | undefined;
     private maxTokens = 2000;
+    private cloudflareToken: string | undefined;
 
-    public constructor(capacity: number) {
+    public constructor(capacity: number, cloudflareToken: string) {
         this.capacity = capacity;
+        this.cloudflareToken = cloudflareToken;
     }
 
     public setMaxTokens(maxTokens: number) {
@@ -95,7 +97,14 @@ export class WorkerPool {
         workerState.conversationId = conversationId;
         workerState.lastActivity = new Date();
         await deleteStreamingMessage(conversationId);
-        workerState.worker.postMessage({ type: "init", payload: { conversationId, maxTokens: this.maxTokens } });
+        workerState.worker.postMessage({
+            type: "init",
+            payload: {
+                conversationId,
+                maxTokens: this.maxTokens,
+                cloudflareToken: this.cloudflareToken
+            }
+        });
     }
 
     private async addWaitingMessage(conversationId: ConversationID): Promise<void> {
