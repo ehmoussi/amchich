@@ -1,13 +1,16 @@
 import logging
 import sys
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
+from typing import Any
 from urllib.parse import urljoin
 
+import async_lru
+import jwt
 import uvicorn
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from httpx import AsyncClient
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -17,6 +20,7 @@ from starlette.background import BackgroundTask
 class Settings(BaseSettings):
     dev_mode: int
     dev_port: int
+    frontend_prod_url: str
     frontend_dev_url: str
     frontend_dev_url_2: str
     openai_api_key: SecretStr
@@ -25,11 +29,13 @@ class Settings(BaseSettings):
     openai_admin_base_url: str
     openrouter_api_key: SecretStr
     openrouter_base_url: str
+    team_domain: str
+    Audience: SecretStr
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 
-_SETTINGS = Settings()
+_SETTINGS = Settings()  # pyright: ignore[reportCallIssue]
 
 _LOGGER = logging.getLogger("amchich")
 _LOGGER.addHandler(logging.StreamHandler(sys.stdout))
@@ -40,12 +46,13 @@ else:
     _LOGGER.setLevel(logging.INFO)
 
 _ORIGINS = [
+    f"{_SETTINGS.frontend_prod_url}",
     f"{_SETTINGS.frontend_dev_url}",
     f"{_SETTINGS.frontend_dev_url_2}",
     f"http://localhost:{_SETTINGS.dev_port}",
     f"http://127.0.0.1:{_SETTINGS.dev_port}",
 ]
-_CLIENT = AsyncClient()
+_CLIENT = AsyncClient(timeout=20)
 
 
 @asynccontextmanager
@@ -96,6 +103,58 @@ async def _proxy_provider(
         response.headers,
         background=BackgroundTask(response.aclose),
     )
+
+
+@async_lru.alru_cache
+async def _get_cloudflare_keys() -> list[Any]:
+    response = await _CLIENT.get(
+        f"https://{_SETTINGS.team_domain}.cloudflareaccess.com/cdn-cgi/access/certs"
+    )
+    body = response.json()
+    if "keys" not in body:
+        raise HTTPException(
+            status_code=500, detail="Token validation failed unexpectedly"
+        )
+    return body["keys"]
+
+
+async def _validate_token(token: str, keys: list[Any]) -> bool:
+    for jwt_key in keys:
+        try:
+            jwt.decode(
+                token,
+                key=jwt.get_algorithm_by_name("RS256").from_jwk(jwt_key),
+                audience=_SETTINGS.Audience.get_secret_value(),
+                algorithms=["RS256"],
+            )
+        except jwt.PyJWTError:
+            pass
+        else:
+            return True
+    return False
+
+
+@app.middleware("http")
+async def verify_token(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
+    is_valid = False
+    if _SETTINGS.dev_mode or request.method == "OPTIONS":
+        is_valid = True
+    else:
+        token = request.headers.get("Authorization")
+        if not token:
+            raise HTTPException(status_code=403, detail="Missing token")
+        token = token.removeprefix("Bearer ")
+        keys = await _get_cloudflare_keys()
+        is_valid = await _validate_token(token, keys)
+        if not is_valid:
+            _get_cloudflare_keys.cache_clear()
+            keys = await _get_cloudflare_keys()
+            is_valid = await _validate_token(token, keys)
+    if is_valid:
+        return await call_next(request)
+    raise HTTPException(status_code=403, detail="Invalid token")
 
 
 @app.get("/api/v1/openrouter/{p1:path}")
