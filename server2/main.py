@@ -1,7 +1,9 @@
 import logging
+import ssl
 import sys
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin
 
@@ -19,6 +21,7 @@ from starlette.background import BackgroundTask
 
 class Settings(BaseSettings):
     dev_mode: int
+    prod_port: int
     dev_port: int
     frontend_prod_url: str
     frontend_dev_url: str
@@ -198,4 +201,17 @@ async def proxy_openai_2(p1: str, p2: str, request: Request) -> StreamingRespons
 
 if __name__ == "__main__":
     log_level = "debug" if _SETTINGS.dev_mode else "info"
-    uvicorn.run("main:app", port=_SETTINGS.dev_port, log_level=log_level, reload=True)
+    port = _SETTINGS.dev_port if _SETTINGS.dev_mode else _SETTINGS.prod_port
+    uvicorn.run(
+        "main:app",
+        workers=2,
+        port=port,
+        log_level=log_level,
+        reload=bool(_SETTINGS.dev_mode),
+        ssl_keyfile=Path(Path(__file__).parent, "ca", "private", "server.key"),
+        ssl_certfile=Path(Path(__file__).parent, "ca", "certs", "server.crt"),
+        ssl_ca_certs=str(
+            Path(Path(__file__).parent, "ca", "certs", "ca.crt").resolve()
+        ),
+        ssl_cert_reqs=ssl.CERT_REQUIRED,
+    )
