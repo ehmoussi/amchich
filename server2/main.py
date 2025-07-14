@@ -216,10 +216,4 @@ if __name__ == "__main__":
         port=port,
         log_level=log_level,
         reload=bool(_SETTINGS.dev_mode),
-        ssl_keyfile=Path(Path(__file__).parent, "ca", "private", "server.key"),
-        ssl_certfile=Path(Path(__file__).parent, "ca", "certs", "server.crt"),
-        ssl_ca_certs=str(
-            Path(Path(__file__).parent, "ca", "certs", "ca.crt").resolve()
-        ),
-        ssl_cert_reqs=ssl.CERT_REQUIRED,
     )
