@@ -48,15 +48,21 @@ if _SETTINGS.dev_mode:
 else:
     _LOGGER.setLevel(logging.INFO)
 
-_ORIGINS = [
-    f"{_SETTINGS.frontend_prod_url}",
-    f"{_SETTINGS.frontend_dev_url}",
-    f"{_SETTINGS.frontend_dev_url_2}",
-    f"http://localhost:{_SETTINGS.dev_port}",
-    f"http://127.0.0.1:{_SETTINGS.dev_port}",
-    f"http://localhost:{_SETTINGS.prod_port}",
-    f"http://127.0.0.1:{_SETTINGS.prod_port}",
-]
+_ORIGINS: list[str]
+if _SETTINGS.dev_mode:
+    _ORIGINS = [
+        f"{_SETTINGS.frontend_dev_url}",
+        f"{_SETTINGS.frontend_dev_url_2}",
+        f"http://localhost:{_SETTINGS.dev_port}",
+        f"http://127.0.0.1:{_SETTINGS.dev_port}",
+    ]
+else:
+    _ORIGINS = [
+        f"{_SETTINGS.frontend_prod_url}",
+        f"http://localhost:{_SETTINGS.prod_port}",
+        f"http://127.0.0.1:{_SETTINGS.prod_port}",
+    ]
+
 _CLIENT = AsyncClient(timeout=20)
 
 
