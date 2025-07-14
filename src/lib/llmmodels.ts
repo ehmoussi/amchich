@@ -36,7 +36,7 @@ async function fetchOllamaModels(signal: AbortSignal): Promise<LLMID[]> {
 
 
 async function fetchOpenAiModels(signal: AbortSignal): Promise<LLMID[]> {
-    const token = await getCloudflareToken();
+    const token = getCloudflareToken();
     const names: LLMID[] = [];
     const response = await fetch(
         `${import.meta.env.VITE_BACKEND_URL}/api/v1/openai/models`,
@@ -57,7 +57,7 @@ async function fetchOpenAiModels(signal: AbortSignal): Promise<LLMID[]> {
 
 
 async function fetchOpenRouterModels(signal: AbortSignal): Promise<LLMID[]> {
-    const token = await getCloudflareToken();
+    const token = getCloudflareToken();
     const names: LLMID[] = [];
     const response = await fetch(
         `${import.meta.env.VITE_BACKEND_URL}/api/v1/openrouter/models`,
@@ -80,7 +80,7 @@ async function fetchOpenRouterModels(signal: AbortSignal): Promise<LLMID[]> {
 
 
 export async function getOpenAIExpense(): Promise<number> {
-    const token = await getCloudflareToken();
+    const token = getCloudflareToken();
     const now = new Date();
     const firstDayOfTheMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const startTime = Math.floor(firstDayOfTheMonth.getTime() / 1000);
@@ -105,7 +105,7 @@ export async function getOpenAIExpense(): Promise<number> {
 
 
 export async function getOpenRouterExpense(): Promise<{ usage: number, total: number }> {
-    const token = await getCloudflareToken();
+    const token = getCloudflareToken();
     const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/v1/openrouter/credits`, {
         method: "GET",
         headers: {
