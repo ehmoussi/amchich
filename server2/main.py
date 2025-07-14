@@ -98,7 +98,15 @@ async def _proxy_provider(
     headers = {
         k: v
         for k, v in request.headers.items()
-        if k.lower() not in ("authorization", "host", "x-forwarded-for")
+        if (
+            k.lower()
+            not in (
+                "authorization",
+                "host",
+                "x-forwarded-for",
+                "permissions-policy",
+            )
+        )
     }
     headers["Authorization"] = f"Bearer {api_key.get_secret_value()}"
     new_request = _CLIENT.build_request(
@@ -129,7 +137,7 @@ async def _get_cloudflare_keys() -> list[Any]:
     return body["keys"]
 
 
-async def _validate_token(token: str, keys: list[Any]) -> bool:
+async def _can_decode_token(token: str, keys: list[Any]) -> bool:
     for jwt_key in keys:
         try:
             jwt.decode(
@@ -145,6 +153,16 @@ async def _validate_token(token: str, keys: list[Any]) -> bool:
     return False
 
 
+async def _is_token_valid(token: str) -> bool:
+    keys = await _get_cloudflare_keys()
+    is_valid = await _can_decode_token(token, keys)
+    if not is_valid:
+        _get_cloudflare_keys.cache_clear()
+        keys = await _get_cloudflare_keys()
+        is_valid = await _can_decode_token(token, keys)
+    return is_valid
+
+
 @app.middleware("http")
 async def verify_token(
     request: Request, call_next: Callable[[Request], Awaitable[Response]]
@@ -157,12 +175,7 @@ async def verify_token(
         if not token:
             raise HTTPException(status_code=403, detail="Missing token")
         token = token.removeprefix("Bearer ")
-        keys = await _get_cloudflare_keys()
-        is_valid = await _validate_token(token, keys)
-        if not is_valid:
-            _get_cloudflare_keys.cache_clear()
-            keys = await _get_cloudflare_keys()
-            is_valid = await _validate_token(token, keys)
+        is_valid = await _is_token_valid(token)
     if is_valid:
         return await call_next(request)
     raise HTTPException(status_code=403, detail="Invalid token")
