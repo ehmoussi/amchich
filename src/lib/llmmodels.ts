@@ -8,10 +8,6 @@ export async function updateAvailableModels(signal: AbortSignal) {
     for (const name of ollamaModelNames) {
         models.push(createModel(name, "Ollama"));
     }
-    const openaiModelNames = await fetchOpenAiModels(signal);
-    for (const name of openaiModelNames) {
-        models.push(createModel(name, "OpenAI"));
-    }
     const openRouterModelNames = await fetchOpenRouterModels(signal);
     for (const name of openRouterModelNames) {
         models.push(createModel(name, "OpenRouter"));
@@ -34,38 +30,12 @@ async function fetchOllamaModels(signal: AbortSignal): Promise<LLMID[]> {
 }
 
 
-
-async function fetchOpenAiModels(signal: AbortSignal): Promise<LLMID[]> {
-    const token = getCloudflareToken();
-    const names: LLMID[] = [];
-    const response = await fetch(
-        `${import.meta.env.VITE_BACKEND_URL}/api/v1/openai/models`,
-        {
-            method: "GET",
-            headers: {
-                Authorization: `Bearer ${token}`,
-            },
-            signal
-        }
-    );
-    const data = await response.json();
-    for (const model of data.data) {
-        names.push(model.id);
-    }
-    return names;
-}
-
-
 async function fetchOpenRouterModels(signal: AbortSignal): Promise<LLMID[]> {
-    const token = getCloudflareToken();
     const names: LLMID[] = [];
     const response = await fetch(
-        `${import.meta.env.VITE_BACKEND_URL}/api/v1/openrouter/models`,
+        "https://openrouter.ai/api/v1/models",
         {
             method: "GET",
-            headers: {
-                Authorization: `Bearer ${token}`,
-            },
             signal
         }
     );
@@ -76,31 +46,6 @@ async function fetchOpenRouterModels(signal: AbortSignal): Promise<LLMID[]> {
         }
     }
     return names;
-}
-
-
-export async function getOpenAIExpense(): Promise<number> {
-    const token = getCloudflareToken();
-    const now = new Date();
-    const firstDayOfTheMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const startTime = Math.floor(firstDayOfTheMonth.getTime() / 1000);
-    const response = await fetch(
-        `${import.meta.env.VITE_BACKEND_URL}/api/v1/openai/organization/costs?start_time=${String(startTime)}&limit=${100}`,
-        {
-            method: "GET",
-            headers: {
-                Authorization: `Bearer ${token}`,
-            },
-        }
-    );
-    const data = await response.json();
-    let totalSpent = 0;
-    for (const bucket of data.data) {
-        for (const item of bucket.results) {
-            totalSpent += item.amount.value;
-        }
-    }
-    return totalSpent;
 }
 
 

@@ -95,18 +95,7 @@ async function streamAnswer(conversationId: ConversationID, maxTokens: number, c
             }
             await incrementUsageCount(model.name);
         }
-        else if (model.provider === "OpenAI") {
-            let buffer = "";
-            for await (const chunk of fetchStreamingOpenAIAnswer(messages, model, maxTokens, cloudflareToken, signal)) {
-                buffer += chunk.text;
-                if (chunk.done || buffer.length > _BUFFER_STREAMING_SIZE) {
-                    message.content.text += buffer;
-                    buffer = "";
-                    await updateStreamingMessage(message);
-                }
-            }
-            await incrementUsageCount(model.name);
-        } else {
+        else {
             console.error(`Unknown provider: ${model.provider}`);
         }
     } catch (error) {
@@ -247,76 +236,6 @@ async function* fetchStreamingOpenRouterAnswer(messages: OpenRouterMessage[], mo
             }
             // Process next line
             buffer = buffer.slice(lineEndIndex + 1);
-        }
-    }
-}
-
-interface OpenAIMessage {
-    role: Role;
-    content: string;
-}
-
-interface OpenAIResponse {
-    delta: string
-}
-
-async function* fetchStreamingOpenAIAnswer(messages: OpenAIMessage[], model: LLMModel, maxTokens: number, cloudflareToken: string, signal: AbortSignal): AsyncGenerator<{ text: string, thinking?: string, done: boolean }> {
-    // const reasoning = model.name.startsWith("o") ? { summary: "detailed" } : undefined;
-    const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/v1/openai/responses`, {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${cloudflareToken}`,
-        },
-        body: JSON.stringify({
-            model: model.name,
-            input: messages,
-            stream: true,
-            // reasoning,
-            max_output_tokens: maxTokens,
-            user: "amchich",
-        }),
-        signal,
-    });
-    const reader = response.body?.getReader();
-    if (!reader) {
-        throw new Error("Can't read the body of the answer");
-    }
-    const decoder = new TextDecoder();
-    let buffer = "";
-    while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-            yield { text: "", done: true };
-            break;
-        }
-        buffer += decoder.decode(value, { stream: true });
-        // Process each lines
-        while (true) {
-            let lineEndIndex = buffer.indexOf("\n");
-            if (lineEndIndex === -1) break; // No new line
-            let line = buffer.slice(0, lineEndIndex).trim();
-            // Process next line
-            buffer = buffer.slice(lineEndIndex + 1);
-            if (line.startsWith("event: ")) {
-                const event = line.slice(7);
-                if (event === "response.completed")
-                    yield { text: "", done: true };
-                else if (event === "response.output_text.delta") {
-                    lineEndIndex = buffer.indexOf("\n");
-                    if (lineEndIndex === -1) break;
-                    line = buffer.slice(0, lineEndIndex).trim();
-                    // Extract data
-                    if (line.startsWith("data: ")) {
-                        const data = line.slice(6);
-                        try {
-                            const chunk = JSON.parse(data) as OpenAIResponse;
-                            yield { text: chunk.delta, done: false }
-                        } catch { // Ignore the errors
-                        }
-                    }
-                }
-            }
         }
     }
 }
