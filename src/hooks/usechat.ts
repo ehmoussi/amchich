@@ -4,17 +4,11 @@ import { addUserMessage, createConversation, createMessage, editUserMessage, typ
 import React from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { MAX_TOKENS } from "../components/chat/chatformoptions";
-import { getCloudflareToken } from "../lib/cloudflaretoken";
 import { toast } from "sonner";
+import { useOpenRouter } from "./useopenrouter";
 
 
-const cloudflareToken = getCloudflareToken();
-let workerPool: WorkerPool | undefined;
-if (cloudflareToken !== null) {
-    workerPool = new WorkerPool(3, cloudflareToken);
-} else {
-    toast.error("Failed to retrieve authentication informations");
-}
+let workerPool: WorkerPool = new WorkerPool(3);
 
 interface ChatProps {
     text: string;
@@ -31,14 +25,15 @@ export function useChat(conversationId: ConversationID | undefined, editedMessag
     const [selectedFiles, setSelectedFiles] = React.useState<File[]>(editedMessage ? editedMessage.content.files.metadata : []);
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
+    const { apiKey } = useOpenRouter();
+    if (apiKey !== undefined) workerPool.setApiKey(apiKey);
 
 
     const maxTokens = searchParams.get("maxTokens");
     if (maxTokens) {
         if (MAX_TOKENS.includes(maxTokens)) {
             try {
-                if (workerPool !== undefined)
-                    workerPool.setMaxTokens(parseInt(maxTokens));
+                workerPool.setMaxTokens(parseInt(maxTokens));
             } catch (error: unknown) { console.error(error); }
         }
     };
@@ -46,15 +41,15 @@ export function useChat(conversationId: ConversationID | undefined, editedMessag
     const startStreamingAnswer = React.useCallback((cid: ConversationID) => {
         setText("");
         setSelectedFiles([]);
-        if (workerPool === undefined) {
-            toast.error("Failed to start the streaming");
+        if (apiKey === undefined) {
+            toast.error("Failed to retrieve the openrouter authorization.");
             return;
         }
         workerPool.startStreaming(cid)
             .catch((error: unknown) => {
                 handleAsyncError(error, "Failed to start the streaming");
             });
-    }, [setText, setSelectedFiles]);
+    }, [setText, setSelectedFiles, apiKey]);
 
     const startConversation = React.useCallback((cid: ConversationID) => {
         const userMessage = createMessage(cid, "user", text, selectedFiles, true);
@@ -94,8 +89,8 @@ export function useChat(conversationId: ConversationID | undefined, editedMessag
     const handleCancel = React.useCallback((e: React.FormEvent<HTMLButtonElement>) => {
         e.preventDefault();
         if (conversationId) {
-            if (workerPool === undefined) {
-                toast.error("Failed to abort the conversation");
+            if (apiKey === undefined) {
+                toast.error("Failed to retrieve the openrouter authorization.");
                 return;
             }
             // console.log("Call abort streaming of the worker pool");
@@ -104,7 +99,7 @@ export function useChat(conversationId: ConversationID | undefined, editedMessag
                     handleAsyncError(error, "Failed to abort the conversation");
                 });
         }
-    }, [conversationId]);
+    }, [conversationId, apiKey]);
 
     const handleSubmit = React.useCallback((e: React.FormEvent<HTMLButtonElement>) => {
         e.preventDefault();

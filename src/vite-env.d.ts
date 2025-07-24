@@ -9,7 +9,7 @@ interface ViteTypeOptions {
 interface ImportMetaEnv {
     readonly VITE_BACKEND_URL: string
     readonly VITE_CLOUDFLARE_TEAM: string
-    // more env variables...
+    readonly VITE_OPENROUTER_KEY_SALT: string
 }
 
 interface ImportMeta {

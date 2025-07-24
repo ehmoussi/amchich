@@ -8,7 +8,7 @@ const _BUFFER_STREAMING_SIZE = 30;
 let controller: AbortController | undefined;
 
 export type WorkerStreamingMessage =
-    | { type: "init", payload: { conversationId: ConversationID, maxTokens: number, cloudflareToken: string } }
+    | { type: "init", payload: { conversationId: ConversationID, maxTokens: number, apiKey: string } }
     | { type: "finished" }
     | { type: "abort" };
 
@@ -17,8 +17,8 @@ self.onmessage = async function (event: MessageEvent<WorkerStreamingMessage>) {
     switch (event.data.type) {
         case "init": {
             controller = new AbortController();
-            const { conversationId, maxTokens, cloudflareToken } = event.data.payload;
-            await streamAnswer(conversationId, maxTokens, cloudflareToken, controller.signal);
+            const { conversationId, maxTokens, apiKey } = event.data.payload;
+            await streamAnswer(conversationId, maxTokens, apiKey, controller.signal);
             break;
         }
         case "abort":
@@ -29,7 +29,7 @@ self.onmessage = async function (event: MessageEvent<WorkerStreamingMessage>) {
     }
 }
 
-async function streamAnswer(conversationId: ConversationID, maxTokens: number, cloudflareToken: string, signal: AbortSignal): Promise<void> {
+async function streamAnswer(conversationId: ConversationID, maxTokens: number, apiKey: string, signal: AbortSignal): Promise<void> {
     // 1. Retrieve the current LLM model
     const model = await getActiveLLMModel();
     if (!model) throw new Error(`Can't find an active LLM model`);
@@ -78,7 +78,7 @@ async function streamAnswer(conversationId: ConversationID, maxTokens: number, c
         else if (model.provider === "OpenRouter") {
             let bufferThinking = "";
             let bufferText = "";
-            for await (const chunk of fetchStreamingOpenRouterAnswer(messages, model, maxTokens, cloudflareToken, signal)) {
+            for await (const chunk of fetchStreamingOpenRouterAnswer(messages, model, maxTokens, apiKey, signal)) {
                 if (chunk.thinking) bufferThinking += chunk.thinking;
                 bufferText += chunk.text;
                 if (chunk.done || bufferThinking.length > _BUFFER_STREAMING_SIZE) {
@@ -110,7 +110,7 @@ async function streamAnswer(conversationId: ConversationID, maxTokens: number, c
             await updateFilesContentOfMessages(filesContentByMessage);
             // 6. Update title of the conversation
             if (messages.length === 1) {
-                const title = await generateTitle(conversationMessages, model);
+                const title = await generateTitle(conversationMessages, model, apiKey);
                 if (title)
                     await updateConversationTitle(conversationId, title);
             }
@@ -184,12 +184,12 @@ interface OpenRouterResponse {
     }[];
 }
 
-async function* fetchStreamingOpenRouterAnswer(messages: OpenRouterMessage[], model: LLMModel, maxTokens: number, cloudflareToken: string, signal: AbortSignal): AsyncGenerator<{ text: string, thinking?: string, done: boolean }> {
-    const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/v1/openrouter/chat/completions`, {
+async function* fetchStreamingOpenRouterAnswer(messages: OpenRouterMessage[], model: LLMModel, maxTokens: number, apiKey: string, signal: AbortSignal): AsyncGenerator<{ text: string, thinking?: string, done: boolean }> {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${cloudflareToken}`,
+            Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
             model: model.name,

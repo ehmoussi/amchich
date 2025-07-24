@@ -1,6 +1,8 @@
+import base64
 import logging
 import ssl
 import sys
+import uuid
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -12,9 +14,9 @@ import jwt
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from httpx import AsyncClient
-from pydantic import SecretStr
+from pydantic import BaseModel, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from starlette.background import BackgroundTask
 
@@ -26,11 +28,9 @@ class Settings(BaseSettings):
     frontend_prod_url: str
     frontend_dev_url: str
     frontend_dev_url_2: str
-    openai_api_key: SecretStr
-    openai_base_url: str
-    openai_admin_key: SecretStr
-    openai_admin_base_url: str
     openrouter_api_key: SecretStr
+    openrouter_prov_api_key: SecretStr
+    openrouter_key_salt: SecretStr
     openrouter_base_url: str
     team_domain: str
     Audience: SecretStr
@@ -81,47 +81,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-async def _proxy_provider(
-    base_url: str, api_key: SecretStr, request: Request, p1: str, p2: str | None = None
-) -> StreamingResponse:
-    url = urljoin(base_url, p1)
-    if p2 is not None:
-        url = urljoin(f"{url}/", p2)
-    if request.url.query:
-        url += f"?{request.url.query}"
-    _LOGGER.debug("URL: %s", url)
-    body = None
-    if request.method == "POST":
-        body = await request.json()
-    headers = {
-        k: v
-        for k, v in request.headers.items()
-        if (
-            k.lower()
-            not in (
-                "authorization",
-                "host",
-                "x-forwarded-for",
-                "permissions-policy",
-            )
-        )
-    }
-    headers["Authorization"] = f"Bearer {api_key.get_secret_value()}"
-    new_request = _CLIENT.build_request(
-        request.method,
-        str(url),
-        headers=headers,
-        json=body,
-    )
-    response = await _CLIENT.send(new_request, stream=True)
-    return StreamingResponse(
-        response.aiter_raw(),
-        response.status_code,
-        response.headers,
-        background=BackgroundTask(response.aclose),
-    )
 
 
 @async_lru.alru_cache
@@ -176,47 +135,58 @@ async def verify_token(
             raise HTTPException(status_code=403, detail="Missing token")
         token = token.removeprefix("Bearer ")
         is_valid = await _is_token_valid(token)
-    if is_valid:
-        return await call_next(request)
-    raise HTTPException(status_code=403, detail="Invalid token")
+    if not is_valid:
+        raise HTTPException(status_code=403, detail="Invalid token")
+    return await call_next(request)
 
 
-@app.get("/api/v1/openrouter/{p1:path}")
-@app.post("/api/v1/openrouter/{p1:path}")
-async def proxy_openrouter(p1: str, request: Request) -> StreamingResponse:
-    return await _proxy_provider(
-        _SETTINGS.openrouter_base_url, _SETTINGS.openrouter_api_key, request, p1
-    )
+class OpenRouterSession(BaseModel):
+    key: bytes
 
 
-@app.get("/api/v1/openrouter/{p1:path}/{p2:path}")
-@app.post("/api/v1/openrouter/{p1:path}/{p2:path}")
-async def proxy_openrouter_2(p1: str, p2: str, request: Request) -> StreamingResponse:
-    return await _proxy_provider(
-        _SETTINGS.openrouter_base_url, _SETTINGS.openrouter_api_key, request, p1, p2
-    )
+@async_lru.alru_cache(ttl=21600)
+async def _get_openrouter_api_key() -> bytes | None:
+    url = f"{_SETTINGS.openrouter_base_url}keys"
+    api_id = uuid.uuid4()
+    headers = {
+        "Authorization": f"Bearer {_SETTINGS.openrouter_prov_api_key.get_secret_value()}",
+        "Content-Type": "application/json",
+    }
+    payload: dict[str, Any] = {"name": str(api_id), "include_byok_in_limit": True}
+    response = await _CLIENT.post(url, headers=headers, json=payload)
+    data = response.json()
+    if "key" in data:
+        api_key = data["key"]
+        salted_api_key = _SETTINGS.openrouter_key_salt.get_secret_value() + api_key
+        return base64.b64encode(salted_api_key.encode())
+    return None
 
 
-@app.get("/api/v1/openai/organization/{p1:path}")
-async def proxy_openai_admin(p1: str, request: Request) -> StreamingResponse:
-    return await _proxy_provider(
-        _SETTINGS.openai_admin_base_url, _SETTINGS.openai_admin_key, request, p1
-    )
+@app.get("/api/v1/openrouter/session")
+async def get_session_key() -> OpenRouterSession:
+    api_key = await _get_openrouter_api_key()
+    if api_key is not None:
+        return OpenRouterSession(key=api_key)
+    raise HTTPException(500, "Failed to retrieve the API key.")
 
 
-@app.get("/api/v1/openai/{p1:path}")
-@app.post("/api/v1/openai/{p1:path}")
-async def proxy_openai(p1: str, request: Request) -> StreamingResponse:
-    return await _proxy_provider(
-        _SETTINGS.openai_base_url, _SETTINGS.openai_api_key, request, p1
-    )
+class OpenRouterExpense(BaseModel):
+    usage: float
+    total: float
 
 
-@app.get("/api/v1/openai/{p1:path}/{p2:path}")
-@app.post("/api/v1/openai/{p1:path}/{p2:path}")
-async def proxy_openai_2(p1: str, p2: str, request: Request) -> StreamingResponse:
-    return await _proxy_provider(
-        _SETTINGS.openai_base_url, _SETTINGS.openai_api_key, request, p1, p2
+@app.get("/api/v1/openrouter/expense")
+async def get_openrouter_expense() -> OpenRouterExpense:
+    url = f"{_SETTINGS.openrouter_base_url}credits"
+    headers = {
+        "Authorization": f"Bearer {_SETTINGS.openrouter_prov_api_key.get_secret_value()}",
+        "Content-Type": "application/json",
+    }
+    response = await _CLIENT.get(url, headers=headers)
+    data = response.json()
+    return OpenRouterExpense(
+        usage=data["data"]["total_usage"],
+        total=data["data"]["total_credits"],
     )
 
 

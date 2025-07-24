@@ -1,18 +1,21 @@
 import type { LLMModel, Message } from "./db";
 
-export async function generateTitle(messages: Message[], model: LLMModel): Promise<string | undefined> {
+export async function generateTitle(messages: Message[], model: LLMModel, apiKey: string): Promise<string | undefined> {
     const prompt = buildTitlePrompt(messages);
     if (model.provider === "OpenAI" || model.provider === "OpenRouter") {
-        return await generateWithOpenRouter(prompt);
+        return await generateWithOpenRouter(prompt, apiKey);
     } else {
         return await generateWithOllama(prompt);
     }
 }
 
-async function generateWithOpenRouter(prompt: string): Promise<string | undefined> {
-    const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/v1/openrouter/chat/completions`, {
+async function generateWithOpenRouter(prompt: string, apiKey: string): Promise<string | undefined> {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+        },
         body: JSON.stringify({
             model: "meta-llama/llama-3.3-8b-instruct:free",
             messages: [{ role: "user", content: prompt }],

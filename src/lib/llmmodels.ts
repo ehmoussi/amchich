@@ -1,4 +1,3 @@
-import { getCloudflareToken } from "./cloudflaretoken";
 import { createModel, setModels, type LLMID, type LLMModel } from "./db";
 
 
@@ -50,16 +49,8 @@ async function fetchOpenRouterModels(signal: AbortSignal): Promise<LLMID[]> {
 
 
 export async function getOpenRouterExpense(): Promise<{ usage: number, total: number }> {
-    const token = getCloudflareToken();
-    const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/v1/openrouter/credits`, {
-        method: "GET",
-        headers: {
-            Authorization: `Bearer ${token}`,
-        },
+    const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/v1/openrouter/expense`, {
+        method: "GET"
     });
-    const data = await response.json();
-    return {
-        usage: data.data.total_usage,
-        total: data.data.total_credits
-    };
+    return await response.json();
 }

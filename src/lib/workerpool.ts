@@ -18,11 +18,14 @@ export class WorkerPool {
     private maxIdleWorkerTime = 10 * 60 * 1000;
     private cleanupInterval: NodeJS.Timeout | undefined;
     private maxTokens = 2000;
-    private cloudflareToken: string | undefined;
+    private apiKey: string | undefined;
 
-    public constructor(capacity: number, cloudflareToken: string) {
+    public constructor(capacity: number) {
         this.capacity = capacity;
-        this.cloudflareToken = cloudflareToken;
+    }
+
+    public setApiKey(apiKey: string) {
+        this.apiKey = apiKey;
     }
 
     public setMaxTokens(maxTokens: number) {
@@ -102,7 +105,7 @@ export class WorkerPool {
             payload: {
                 conversationId,
                 maxTokens: this.maxTokens,
-                cloudflareToken: this.cloudflareToken
+                apiKey: this.apiKey
             }
         });
     }
