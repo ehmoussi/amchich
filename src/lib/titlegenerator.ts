@@ -27,7 +27,6 @@ async function generateWithOpenRouter(prompt: string, apiKey: string): Promise<s
         }),
     });
     const data = await response.json();
-    console.log("data:", data.choices[0]);
     return data.choices[0].message.content;
 }
 
@@ -44,7 +43,6 @@ async function generateWithOllama(prompt: string): Promise<string | undefined> {
         }),
     });
     const data = await response.json();
-    console.log("data:", data);
     return data.message.content.trim();
 }
 

@@ -145,7 +145,6 @@ const MessagePagination = React.memo(function ({ message }: { message: UMessage 
     }, [siblings, currentPage, message.id]);
 
     const moveToNextMessage = React.useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
-        console.log("moveToNextMessage", currentPage, siblings);
         e.preventDefault();
         if (currentPage !== undefined && siblings) {
             updateActiveMessage(message.id, siblings[currentPage + 1])

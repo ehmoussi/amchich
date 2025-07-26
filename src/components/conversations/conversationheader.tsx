@@ -14,7 +14,6 @@ export function ConversationHeader() {
                 void navigate(`/${conversationId.toString()}`);
             })
             .catch((error: unknown) => {
-                console.log("Failed to create a new conversation:", error);
                 toast.error("Failed to create a new conversation");
             });
     }, [navigate]);
