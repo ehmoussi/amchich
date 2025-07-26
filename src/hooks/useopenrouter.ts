@@ -24,10 +24,10 @@ export function useOpenRouter(): OpenRouterAPI {
             .then((data) => {
                 let delta = 0;
                 if (isMounted && data.key !== undefined && data.expire_at !== undefined) {
-                    delta = data.expire_at * 1000 - Date.now();
+                    delta = (data.expire_at * 1000 - Date.now()) / 1000;
                 }
                 if (delta > 0) {
-                    if (delta < (maxAge * 1000)) maxAge = parseInt((delta / 1000).toString());
+                    if (delta < maxAge) maxAge = parseInt(delta.toString());
                     setCookies(COOKIE_NAME, data.key, { path: "/", maxAge, secure: true, sameSite: "strict" });
                     return;
                 }
@@ -38,15 +38,9 @@ export function useOpenRouter(): OpenRouterAPI {
         return () => { isMounted = false; }
     }, []);
 
-    return { apiKey: cookies.or_authorization ? decodeAPIKey(cookies.or_authorization) : undefined }
+    return { apiKey: cookies.or_authorization }
 }
 
-function decodeAPIKey(encodedAPIKey: string): string {
-    const key = atob(encodedAPIKey);
-    const salt = import.meta.env.VITE_OPENROUTER_KEY_SALT;
-    const apiKey = key.replace(salt, "");
-    return apiKey;
-}
 
 async function getAPIKey(): Promise<{ key: string, expire_at: number }> {
     const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/v1/openrouter/session`, {

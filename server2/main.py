@@ -17,6 +17,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 import cloudflare
 import db
+import encrypt
 import expire
 
 
@@ -118,11 +119,6 @@ class OpenRouterSession(BaseModel):
     expire_at: float
 
 
-def _to_salted_api_key(api_key: str) -> bytes:
-    salted_api_key = _SETTINGS.openrouter_key_salt.get_secret_value() + api_key
-    return base64.b64encode(salted_api_key.encode())
-
-
 async def _get_openrouter_api_key() -> tuple[bytes | None, float | None]:
     url = f"{_SETTINGS.openrouter_base_url}keys"
     api_id = uuid.uuid4()
@@ -135,11 +131,13 @@ async def _get_openrouter_api_key() -> tuple[bytes | None, float | None]:
     data = response.json()
     if "key" in data and "data" in data and "hash" in data["data"]:
         api_key = data["key"]
-        salted_api_key = _to_salted_api_key(api_key)
-        expire_at = await db.add_created_key(
-            str(api_id), salted_api_key, str(data["data"]["hash"])
+        encrypted_api_key = encrypt.encrypt_api_key(
+            api_key, _SETTINGS.openrouter_key_salt.get_secret_value()
         )
-        return salted_api_key, expire_at
+        expire_at = await db.add_created_key(
+            str(api_id), encrypted_api_key, str(data["data"]["hash"])
+        )
+        return encrypted_api_key, expire_at
     return None, None
 
 

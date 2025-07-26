@@ -2,6 +2,7 @@ import Worker from "./worker?worker";
 import { createMessage, deleteStreamingMessage, updateStreamingMessage, type ConversationID } from "./db";
 import { handleAsyncError } from "./utils";
 import type { WorkerStreamingMessage } from "./worker";
+import { decryptApiKey } from "./decrypt"
 
 interface WorkerState {
     worker: Worker;
@@ -18,14 +19,15 @@ export class WorkerPool {
     private maxIdleWorkerTime = 10 * 60 * 1000;
     private cleanupInterval: NodeJS.Timeout | undefined;
     private maxTokens = 2000;
+    private encryptedApiKey: string | undefined;
     private apiKey: string | undefined;
 
     public constructor(capacity: number) {
         this.capacity = capacity;
     }
 
-    public setApiKey(apiKey: string) {
-        this.apiKey = apiKey;
+    public setApiKey(encryptedApiKey: string) {
+        this.encryptedApiKey = encryptedApiKey;
     }
 
     public setMaxTokens(maxTokens: number) {
@@ -100,14 +102,21 @@ export class WorkerPool {
         workerState.conversationId = conversationId;
         workerState.lastActivity = new Date();
         await deleteStreamingMessage(conversationId);
-        workerState.worker.postMessage({
-            type: "init",
-            payload: {
-                conversationId,
-                maxTokens: this.maxTokens,
-                apiKey: this.apiKey
-            }
-        });
+        if (this.encryptedApiKey !== undefined && this.apiKey === undefined) {
+            this.apiKey = await decryptApiKey(this.encryptedApiKey, import.meta.env.VITE_OPENROUTER_KEY_SALT);
+        }
+        if (this.apiKey !== undefined) {
+            workerState.worker.postMessage({
+                type: "init",
+                payload: {
+                    conversationId,
+                    maxTokens: this.maxTokens,
+                    apiKey: this.apiKey,
+                }
+            });
+        } else {
+            throw new Error("Can't initialize a conversation without an API key");
+        }
     }
 
     private async addWaitingMessage(conversationId: ConversationID): Promise<void> {
