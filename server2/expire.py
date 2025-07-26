@@ -56,7 +56,7 @@ async def remove_expired_key(
     response = await client.delete(url, headers=headers)
     data = response.json()
     logger.debug(data)
-    if "data" in data and "success" in data["data"] and bool(data["data"]["success"]):
+    if "deleted" in data and bool(data["deleted"]):
         await db.delete_key(api_hash)
         logger.info("Successfully delete api: %s", api_hash)
         return True
