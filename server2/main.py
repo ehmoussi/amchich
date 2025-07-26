@@ -1,24 +1,23 @@
+import asyncio
 import base64
 import logging
-import ssl
 import sys
 import uuid
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
-from pathlib import Path
 from typing import Any
-from urllib.parse import urljoin
 
-import async_lru
-import jwt
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response, StreamingResponse
+from fastapi.responses import Response
 from httpx import AsyncClient
 from pydantic import BaseModel, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from starlette.background import BackgroundTask
+
+import cloudflare
+import db
+import expire
 
 
 class Settings(BaseSettings):
@@ -64,12 +63,23 @@ else:
     ]
 
 _CLIENT = AsyncClient(timeout=20)
+_BACKGROUND_TASKS: set[asyncio.Task[None]] = set()
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
+    await db.create_db_and_tables()
+    _BACKGROUND_TASKS.add(
+        await expire.remove_expired_keys(
+            _SETTINGS.openrouter_base_url,
+            _SETTINGS.openrouter_prov_api_key.get_secret_value(),
+            _CLIENT,
+            _LOGGER,
+        )
+    )
     yield
     await _CLIENT.aclose()
+    _BACKGROUND_TASKS.clear()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -81,45 +91,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-@async_lru.alru_cache
-async def _get_cloudflare_keys() -> list[Any]:
-    response = await _CLIENT.get(
-        f"https://{_SETTINGS.team_domain}.cloudflareaccess.com/cdn-cgi/access/certs"
-    )
-    body = response.json()
-    if "keys" not in body:
-        raise HTTPException(
-            status_code=500, detail="Token validation failed unexpectedly"
-        )
-    return body["keys"]
-
-
-async def _can_decode_token(token: str, keys: list[Any]) -> bool:
-    for jwt_key in keys:
-        try:
-            jwt.decode(
-                token,
-                key=jwt.get_algorithm_by_name("RS256").from_jwk(jwt_key),
-                audience=_SETTINGS.Audience.get_secret_value(),
-                algorithms=["RS256"],
-            )
-        except jwt.PyJWTError:
-            pass
-        else:
-            return True
-    return False
-
-
-async def _is_token_valid(token: str) -> bool:
-    keys = await _get_cloudflare_keys()
-    is_valid = await _can_decode_token(token, keys)
-    if not is_valid:
-        _get_cloudflare_keys.cache_clear()
-        keys = await _get_cloudflare_keys()
-        is_valid = await _can_decode_token(token, keys)
-    return is_valid
 
 
 @app.middleware("http")
@@ -134,7 +105,9 @@ async def verify_token(
         if not token:
             raise HTTPException(status_code=403, detail="Missing token")
         token = token.removeprefix("Bearer ")
-        is_valid = await _is_token_valid(token)
+        is_valid = await cloudflare.is_token_valid(
+            token, _SETTINGS.Audience.get_secret_value(), _SETTINGS.team_domain, _CLIENT
+        )
     if not is_valid:
         raise HTTPException(status_code=403, detail="Invalid token")
     return await call_next(request)
@@ -142,10 +115,15 @@ async def verify_token(
 
 class OpenRouterSession(BaseModel):
     key: bytes
+    expire_at: float
 
 
-@async_lru.alru_cache(ttl=21600)
-async def _get_openrouter_api_key() -> bytes | None:
+def _to_salted_api_key(api_key: str) -> bytes:
+    salted_api_key = _SETTINGS.openrouter_key_salt.get_secret_value() + api_key
+    return base64.b64encode(salted_api_key.encode())
+
+
+async def _get_openrouter_api_key() -> tuple[bytes | None, float | None]:
     url = f"{_SETTINGS.openrouter_base_url}keys"
     api_id = uuid.uuid4()
     headers = {
@@ -155,18 +133,23 @@ async def _get_openrouter_api_key() -> bytes | None:
     payload: dict[str, Any] = {"name": str(api_id), "include_byok_in_limit": True}
     response = await _CLIENT.post(url, headers=headers, json=payload)
     data = response.json()
-    if "key" in data:
+    if "key" in data and "data" in data and "hash" in data["data"]:
         api_key = data["key"]
-        salted_api_key = _SETTINGS.openrouter_key_salt.get_secret_value() + api_key
-        return base64.b64encode(salted_api_key.encode())
-    return None
+        salted_api_key = _to_salted_api_key(api_key)
+        expire_at = await db.add_created_key(
+            str(api_id), salted_api_key, str(data["data"]["hash"])
+        )
+        return salted_api_key, expire_at
+    return None, None
 
 
 @app.get("/api/v1/openrouter/session")
 async def get_session_key() -> OpenRouterSession:
-    api_key = await _get_openrouter_api_key()
-    if api_key is not None:
-        return OpenRouterSession(key=api_key)
+    api_key, expire_at = await db.get_available_key()
+    if api_key is None or expire_at is None:
+        api_key, expire_at = await _get_openrouter_api_key()
+    if api_key is not None and expire_at is not None:
+        return OpenRouterSession(key=api_key, expire_at=expire_at)
     raise HTTPException(500, "Failed to retrieve the API key.")
 
 

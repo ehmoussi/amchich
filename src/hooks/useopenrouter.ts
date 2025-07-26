@@ -15,21 +15,25 @@ const COOKIE_NAME = "or_authorization";
 
 export function useOpenRouter(): OpenRouterAPI {
     const [cookies, setCookies] = useCookies<string, CookieAPIKey>([COOKIE_NAME]);
-    const maxAge = 6 * 60 * 60;
+    let maxAge = 1 * 60 * 60;
 
     React.useEffect(() => {
         if (cookies.or_authorization !== undefined) return;
         let isMounted = true;
         getAPIKey()
-            .then((apiKey) => {
-                if (isMounted) {
-                    setCookies(COOKIE_NAME, apiKey, { path: "/", maxAge, secure: true, sameSite: "strict" });
-                    console.log("apiKey", apiKey);
+            .then((data) => {
+                let delta = 0;
+                if (isMounted && data.key !== undefined && data.expire_at !== undefined) {
+                    delta = data.expire_at * 1000 - Date.now();
                 }
+                if (delta > 0) {
+                    if (delta < (maxAge * 1000)) maxAge = parseInt((delta / 1000).toString());
+                    setCookies(COOKIE_NAME, data.key, { path: "/", maxAge, secure: true, sameSite: "strict" });
+                    return;
+                }
+                throw new Error();
             })
-            .catch((error: unknown) =>
-                handleAsyncError(error, "Failed to retrieve an API key from OpenRouter")
-            );
+            .catch((error: unknown) => handleAsyncError(error, "Failed to retrieve an API key from OpenRouter"));
 
         return () => { isMounted = false; }
     }, []);
@@ -44,13 +48,10 @@ function decodeAPIKey(encodedAPIKey: string): string {
     return apiKey;
 }
 
-async function getAPIKey(): Promise<string> {
+async function getAPIKey(): Promise<{ key: string, expire_at: number }> {
     const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/v1/openrouter/session`, {
         method: "GET",
-        headers: {
-            "Content-Type": "application/json",
-        }
+        headers: { "Content-Type": "application/json" }
     });
-    const { key: key64 } = await response.json();
-    return key64;
+    return await response.json();
 }

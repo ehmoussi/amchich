@@ -28,7 +28,6 @@ export function useChat(conversationId: ConversationID | undefined, editedMessag
     const { apiKey } = useOpenRouter();
     if (apiKey !== undefined) workerPool.setApiKey(apiKey);
 
-
     const maxTokens = searchParams.get("maxTokens");
     if (maxTokens) {
         if (MAX_TOKENS.includes(maxTokens)) {
