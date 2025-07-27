@@ -1,6 +1,7 @@
 import asyncio
-import base64
+import datetime
 import logging
+import math
 import sys
 import uuid
 from collections.abc import AsyncGenerator, Awaitable, Callable
@@ -65,6 +66,7 @@ else:
 
 _CLIENT = AsyncClient(timeout=20)
 _BACKGROUND_TASKS: set[asyncio.Task[None]] = set()
+DEFAULT_MAX_AGE_SECONDS = 60 * 60  # 1 hour
 
 
 @asynccontextmanager
@@ -116,7 +118,7 @@ async def verify_token(
 
 class OpenRouterSession(BaseModel):
     key: bytes
-    expire_at: float
+    max_age: float
 
 
 async def _get_openrouter_api_key() -> tuple[bytes | None, float | None]:
@@ -147,7 +149,16 @@ async def get_session_key() -> OpenRouterSession:
     if api_key is None or expire_at is None:
         api_key, expire_at = await _get_openrouter_api_key()
     if api_key is not None and expire_at is not None:
-        return OpenRouterSession(key=api_key, expire_at=expire_at)
+        delta = (
+            datetime.datetime.fromtimestamp(expire_at, tz=datetime.UTC)
+            - datetime.datetime.now(tz=datetime.UTC)
+        ).total_seconds()
+        max_age = (
+            math.floor(delta)
+            if (delta < DEFAULT_MAX_AGE_SECONDS)
+            else DEFAULT_MAX_AGE_SECONDS
+        )
+        return OpenRouterSession(key=api_key, max_age=max_age)
     raise HTTPException(500, "Failed to retrieve the API key.")
 
 
