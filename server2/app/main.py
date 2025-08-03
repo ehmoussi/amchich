@@ -99,7 +99,14 @@ async def verify_token(
     request: Request, call_next: Callable[[Request], Awaitable[Response]]
 ) -> Response:
     is_valid = False
-    if _SETTINGS.dev_mode or request.method == "OPTIONS":
+    if (
+        (
+            request.url.path in ("/api/v1/health", "/favicon.ico")
+            and request.method == "GET"
+        )
+        or request.method == "OPTIONS"
+        or _SETTINGS.dev_mode
+    ):
         is_valid = True
     else:
         token = request.headers.get("Authorization")
@@ -112,6 +119,11 @@ async def verify_token(
     if not is_valid:
         raise HTTPException(status_code=401, detail="Invalid token")
     return await call_next(request)
+
+
+@app.get("/api/v1/health")
+def check_health() -> str:
+    return "Hello"
 
 
 class OpenRouterSession(BaseModel):
@@ -179,20 +191,6 @@ async def remove_session_key(api_hash: str, delay: int) -> None:
     )
 
 
-@app.delete("/api/v1/openrouter/session/{api_hash}", status_code=204)
-async def delete_session_key(api_hash: str) -> None:
-    try:
-        await expire.remove_key(
-            api_hash,
-            _SETTINGS.openrouter_base_url,
-            _SETTINGS.openrouter_prov_api_key.get_secret_value(),
-            _CLIENT,
-            _LOGGER,
-        )
-    except Exception:
-        _LOGGER.exception("Failed to remove the key: %s", api_hash)
-
-
 @app.get("/api/v1/openrouter/session")
 async def get_session_key(background_tasks: BackgroundTasks) -> OpenRouterSession:
     is_new_key = False
@@ -207,6 +205,20 @@ async def get_session_key(background_tasks: BackgroundTasks) -> OpenRouterSessio
     if is_new_key:
         background_tasks.add_task(remove_session_key, api_hash, delay_session.expire)
     return OpenRouterSession(key=api_key, hash=api_hash, max_age=delay_session.max_age)
+
+
+@app.delete("/api/v1/openrouter/session/{api_hash}", status_code=204)
+async def delete_session_key(api_hash: str) -> None:
+    try:
+        await expire.remove_key(
+            api_hash,
+            _SETTINGS.openrouter_base_url,
+            _SETTINGS.openrouter_prov_api_key.get_secret_value(),
+            _CLIENT,
+            _LOGGER,
+        )
+    except Exception:
+        _LOGGER.exception("Failed to remove the key: %s", api_hash)
 
 
 class OpenRouterExpense(BaseModel):
