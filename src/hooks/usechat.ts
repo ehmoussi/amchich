@@ -4,8 +4,6 @@ import { addUserMessage, createConversation, createMessage, editUserMessage, typ
 import React from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { MAX_TOKENS } from "../components/chat/chatformoptions";
-import { toast } from "sonner";
-import { useOpenRouter } from "./useopenrouter";
 
 
 let workerPool: WorkerPool = new WorkerPool(3);
@@ -25,8 +23,6 @@ export function useChat(conversationId: ConversationID | undefined, editedMessag
     const [selectedFiles, setSelectedFiles] = React.useState<File[]>(editedMessage ? editedMessage.content.files.metadata : []);
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
-    const { apiKey } = useOpenRouter();
-    if (apiKey !== undefined) workerPool.setApiKey(apiKey);
 
     const maxTokens = searchParams.get("maxTokens");
     if (maxTokens) {
@@ -40,15 +36,11 @@ export function useChat(conversationId: ConversationID | undefined, editedMessag
     const startStreamingAnswer = React.useCallback((cid: ConversationID) => {
         setText("");
         setSelectedFiles([]);
-        if (apiKey === undefined) {
-            toast.error("Failed to retrieve the openrouter authorization.");
-            return;
-        }
         workerPool.startStreaming(cid)
             .catch((error: unknown) => {
                 handleAsyncError(error, "Failed to start the streaming");
             });
-    }, [setText, setSelectedFiles, apiKey]);
+    }, [setText, setSelectedFiles]);
 
     const startConversation = React.useCallback((cid: ConversationID) => {
         const userMessage = createMessage(cid, "user", text, selectedFiles, true);
@@ -88,17 +80,13 @@ export function useChat(conversationId: ConversationID | undefined, editedMessag
     const handleCancel = React.useCallback((e: React.FormEvent<HTMLButtonElement>) => {
         e.preventDefault();
         if (conversationId) {
-            if (apiKey === undefined) {
-                toast.error("Failed to retrieve the openrouter authorization.");
-                return;
-            }
             // console.log("Call abort streaming of the worker pool");
             workerPool.abortStreaming(conversationId)
                 .catch((error: unknown) => {
                     handleAsyncError(error, "Failed to abort the conversation");
                 });
         }
-    }, [conversationId, apiKey]);
+    }, [conversationId]);
 
     const handleSubmit = React.useCallback((e: React.FormEvent<HTMLButtonElement>) => {
         e.preventDefault();

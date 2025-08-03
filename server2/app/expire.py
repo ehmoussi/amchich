@@ -6,22 +6,31 @@ import logging
 import math
 
 import httpx
+from pydantic import BaseModel
 
 from app import db
 
 _REPEAT_CHECK_EXPIRATION_EVERY_SECONDS = 1 * 60  # 1 minute
+_MAX_AGE_DELAY = 5 * 60  # 5 minutes
+
+
+class DelaySession(BaseModel):
+    expire: int
+    max_age: int
 
 
 def compute_max_age_session(
     api_key: bytes | None, expire_at: float | None
-) -> int | None:
+) -> DelaySession | None:
     if api_key is not None and expire_at is not None:
         delta = (
             datetime.datetime.fromtimestamp(expire_at, tz=datetime.UTC)
             - datetime.datetime.now(tz=datetime.UTC)
         ).total_seconds()
-        if delta:
-            return math.floor(delta)
+        expire = math.floor(delta)
+        max_age = expire - _MAX_AGE_DELAY
+        if max_age > _MAX_AGE_DELAY:
+            return DelaySession(expire=expire, max_age=max_age)
     return None
 
 

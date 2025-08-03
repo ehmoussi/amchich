@@ -24,12 +24,14 @@ async def create_db_and_tables() -> None:
         await conn.commit()
 
 
-async def get_available_key(offset: float = 120) -> tuple[bytes | None, float | None]:
+async def get_available_key(
+    offset: float = 120,
+) -> tuple[bytes | None, str | None, float | None]:
     current_date = datetime.datetime.now(tz=datetime.UTC).timestamp() + offset
     async with aiosqlite.connect(DB_PATH) as conn:
         cursor = await conn.execute(
             """--sql
-            SELECT api_key, expire_at
+            SELECT api_key, api_hash, expire_at
             FROM openrouter_key
             WHERE expire_at > :current_date
             LIMIT 1
@@ -38,8 +40,8 @@ async def get_available_key(offset: float = 120) -> tuple[bytes | None, float | 
         )
         row = await cursor.fetchone()
         if row is not None:
-            return bytes(row[0]), float(row[2])
-    return None, None
+            return bytes(row[0]), str(row[1]), float(row[2])
+    return None, None, None
 
 
 async def get_expired_keys() -> list[str]:

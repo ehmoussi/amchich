@@ -21,14 +21,14 @@ export class WorkerPool {
     private maxTokens = 2000;
     private encryptedApiKey: string | undefined;
     private apiKey: string | undefined;
+    private apiHash: string | undefined;
+    private maxRetries: number = 3;
+    private apiKeyTimeoutId: NodeJS.Timeout | undefined;
 
     public constructor(capacity: number) {
         this.capacity = capacity;
     }
 
-    public setApiKey(encryptedApiKey: string) {
-        this.encryptedApiKey = encryptedApiKey;
-    }
 
     public setMaxTokens(maxTokens: number) {
         this.maxTokens = maxTokens;
@@ -53,6 +53,9 @@ export class WorkerPool {
                     }
                     return true;
                 });
+            }
+            if (this.workers.length === 0) {
+                this.cleanApiKeys();
             }
         }, this.maxIdleWorkerTime);
     }
@@ -102,6 +105,9 @@ export class WorkerPool {
         workerState.conversationId = conversationId;
         workerState.lastActivity = new Date();
         await deleteStreamingMessage(conversationId);
+        if (this.encryptedApiKey === undefined) {
+            await this.fetchAndStoreAPIKey();
+        }
         if (this.encryptedApiKey !== undefined && this.apiKey === undefined) {
             this.apiKey = await decryptApiKey(this.encryptedApiKey, import.meta.env.VITE_OPENROUTER_KEY_SALT);
         }
@@ -183,4 +189,54 @@ export class WorkerPool {
         workerState.lastActivity = new Date();
         workerState.isActive = false;
     }
+
+    private async fetchAndStoreAPIKey(): Promise<void> {
+        for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+            try {
+                const data = await this.fetchAPIKey();
+                this.encryptedApiKey = data.key;
+                this.apiHash = data.hash;
+                // Try to fetch a new key a few seconds before it expires
+                this.apiKeyTimeoutId = setTimeout(this.fetchAndStoreAPIKey, (data.max_age - 20) * 1000);
+                return;
+            } catch (error: unknown) {
+                if (attempt === this.maxRetries || (error instanceof Error && error.message.includes("Invalid API"))) {
+                    handleAsyncError(error, "Failed to retrieve an API key from OpenRouter");
+                    return;
+                }
+            };
+        }
+    }
+
+    private async fetchAPIKey(): Promise<{ key: string, hash: string, max_age: number }> {
+        const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/v1/openrouter/session`, {
+            method: "GET",
+            headers: { "Content-Type": "application/json" },
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        const data = await response.json();
+        if (!data.key || !data.hash || !data.max_age || typeof data.max_age !== "number") {
+            throw new Error("Invalid API");
+        }
+        return data;
+    }
+
+    private async fetchRemoveAPIKey(): Promise<void> {
+        if (this.apiHash !== undefined) {
+            const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/v1/openrouter/session/${this.apiHash}`, {
+                method: "DELETE",
+                headers: { "Content-Type": "application/json" },
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+    }
+
+    private cleanApiKeys(): void {
+        clearTimeout(this.apiKeyTimeoutId);
+        this.apiKey = undefined;
+        this.encryptedApiKey = undefined;
+        this.fetchRemoveAPIKey();
+        this.apiHash = undefined;
+    }
+
 }

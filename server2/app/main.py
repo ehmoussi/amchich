@@ -6,6 +6,7 @@ from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from typing import Any
 
+import httpx
 import uvicorn
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -88,7 +89,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=_ORIGINS,
     allow_credentials=False,
-    allow_methods=["GET"],
+    allow_methods=["GET", "DELETE"],
     allow_headers=["Authorization", "Content-Type", "Accept"],
 )
 
@@ -115,6 +116,7 @@ async def verify_token(
 
 class OpenRouterSession(BaseModel):
     key: bytes
+    hash: str
     max_age: float
 
 
@@ -143,7 +145,12 @@ async def _get_openrouter_api_key() -> tuple[bytes | None, str | None, float | N
     payload: dict[str, Any] = {"name": api_id, "include_byok_in_limit": True}
     try:
         response = await _CLIENT.post(url, headers=headers, json=payload)
+        response.raise_for_status()
         response_json = response.json()
+    except (httpx.HTTPStatusError, httpx.RequestError):
+        _LOGGER.exception("OpenRouter request failed")
+        return None, None, None
+    try:
         data = OpenRouterSessionResponse(**response_json)
         api_hash = data.data.hash
         encrypted_api_key = encrypt.encrypt_api_key(
@@ -152,6 +159,8 @@ async def _get_openrouter_api_key() -> tuple[bytes | None, str | None, float | N
         )
         expire_at = await db.add_created_key(api_id, encrypted_api_key, api_hash)
     except Exception:
+        if "error" in response_json:
+            _LOGGER.exception(response_json["error"])
         _LOGGER.exception("Failed to create the API key")
         return None, None, None
     else:
@@ -170,19 +179,34 @@ async def remove_session_key(api_hash: str, delay: int) -> None:
     )
 
 
+@app.delete("/api/v1/openrouter/session/{api_hash}", status_code=204)
+async def delete_session_key(api_hash: str) -> None:
+    try:
+        await expire.remove_key(
+            api_hash,
+            _SETTINGS.openrouter_base_url,
+            _SETTINGS.openrouter_prov_api_key.get_secret_value(),
+            _CLIENT,
+            _LOGGER,
+        )
+    except Exception:
+        _LOGGER.exception("Failed to remove the key: %s", api_hash)
+
+
 @app.get("/api/v1/openrouter/session")
 async def get_session_key(background_tasks: BackgroundTasks) -> OpenRouterSession:
-    api_hash: str | None = None
-    api_key, expire_at = await db.get_available_key()
-    max_age = expire.compute_max_age_session(api_key, expire_at)
-    if api_key is None or max_age is None:
+    is_new_key = False
+    api_key, api_hash, expire_at = await db.get_available_key()
+    delay_session = expire.compute_max_age_session(api_key, expire_at)
+    if api_key is None or delay_session is None:
+        is_new_key = True
         api_key, api_hash, expire_at = await _get_openrouter_api_key()
-        max_age = expire.compute_max_age_session(api_key, expire_at)
-    if api_key is None or max_age is None:
+        delay_session = expire.compute_max_age_session(api_key, expire_at)
+    if api_key is None or api_hash is None or delay_session is None:
         raise HTTPException(500, "Failed to retrieve the API key.")
-    if api_hash is not None:
-        background_tasks.add_task(remove_session_key, api_hash, max_age)
-    return OpenRouterSession(key=api_key, max_age=max_age)
+    if is_new_key:
+        background_tasks.add_task(remove_session_key, api_hash, delay_session.expire)
+    return OpenRouterSession(key=api_key, hash=api_hash, max_age=delay_session.max_age)
 
 
 class OpenRouterExpense(BaseModel):
