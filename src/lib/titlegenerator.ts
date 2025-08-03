@@ -17,7 +17,7 @@ async function generateWithOpenRouter(prompt: string, apiKey: string): Promise<s
             Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-            model: "meta-llama/llama-3.2-3b-instruct:free",
+            model: "google/gemini-2.5-flash-lite",
             messages: [{ role: "user", content: prompt }],
             stream: false,
             reasoning: { exclude: true },

@@ -228,10 +228,13 @@ async function* fetchStreamingOpenRouterAnswer(messages: OpenRouterMessage[], mo
             if (line.startsWith("data: ")) {
                 const data = line.slice(6);
                 if (data === "[DONE]") yield { text: "", done: true };
-                try {
-                    const chunk = JSON.parse(data) as OpenRouterResponse;
-                    yield { text: chunk.choices[0].delta.content, thinking: chunk.choices[0].delta.reasoning, done: false };
-                } catch { // Ignore the errors
+                else {
+                    try {
+                        const chunk = JSON.parse(data) as OpenRouterResponse;
+                        yield { text: chunk.choices[0].delta.content, thinking: chunk.choices[0].delta.reasoning, done: false };
+                    } catch (error: unknown) {
+                        console.error(error);
+                    }
                 }
             }
             // Process next line
