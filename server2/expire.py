@@ -7,7 +7,23 @@ import httpx
 
 import db
 
-_REPEAT_CHECK_EXPIRATION_EVERY_SECONDS = 10 * 60  # 10 minutes
+_REPEAT_CHECK_EXPIRATION_EVERY_SECONDS = 1 * 60  # 1 minute
+
+
+async def remove_all_keys(
+    openrouter_base_url: str,
+    openrouter_prov_api_key: str,
+    client: httpx.AsyncClient,
+    logger: logging.Logger,
+) -> None:
+    expired_api_hashes = await db.get_all_keys()
+    tasks = [
+        _remove_key(
+            api_hash, openrouter_base_url, openrouter_prov_api_key, client, logger
+        )
+        for api_hash in expired_api_hashes
+    ]
+    await asyncio.gather(*tasks)
 
 
 async def remove_expired_keys(
@@ -23,7 +39,7 @@ async def remove_expired_keys(
                 expired_api_hashes = await db.get_expired_keys()
                 logger.info("expired keys: %s", expired_api_hashes)
                 tasks = [
-                    remove_expired_key(
+                    _remove_key(
                         api_hash,
                         openrouter_base_url,
                         openrouter_prov_api_key,
@@ -40,7 +56,7 @@ async def remove_expired_keys(
     return asyncio.ensure_future(loop())
 
 
-async def remove_expired_key(
+async def _remove_key(
     api_hash: str,
     openrouter_base_url: str,
     openrouter_prov_api_key: str,
@@ -48,14 +64,12 @@ async def remove_expired_key(
     logger: logging.Logger,
 ) -> bool:
     url = f"{openrouter_base_url}keys/{api_hash}"
-    logger.debug(url)
     headers = {
         "Authorization": f"Bearer {openrouter_prov_api_key}",
         "Content-Type": "application/json",
     }
     response = await client.delete(url, headers=headers)
     data = response.json()
-    logger.debug(data)
     if "deleted" in data and bool(data["deleted"]):
         await db.delete_key(api_hash)
         logger.info("Successfully delete api: %s", api_hash)

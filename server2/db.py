@@ -5,7 +5,7 @@ import datetime
 import aiosqlite
 
 DB_PATH = "./db.sqlite"
-EXPIRATION_HOUR_LIMIT = 1
+EXPIRATION_MINUTES_LIMIT = 15
 
 
 async def create_db_and_tables() -> None:
@@ -55,11 +55,23 @@ async def get_expired_keys() -> list[str]:
     return []
 
 
+async def get_all_keys() -> list[str]:
+    """Get the api hash of all the keys stored in the database."""
+    async with aiosqlite.connect(DB_PATH) as conn, conn.execute(
+        """--sql
+        SELECT api_hash
+        FROM openrouter_key
+        """
+    ) as cursor:
+        return [str(api_hash) async for api_hash, *_ in cursor]
+    return []
+
+
 async def add_created_key(api_id: str, api_key: bytes, api_hash: str) -> float:
     created_at = datetime.datetime.now(tz=datetime.UTC).timestamp()
     expire_at = (
         datetime.datetime.now(tz=datetime.UTC)
-        + datetime.timedelta(hours=EXPIRATION_HOUR_LIMIT)
+        + datetime.timedelta(minutes=EXPIRATION_MINUTES_LIMIT)
     ).timestamp()
     async with aiosqlite.connect(DB_PATH) as conn:
         await conn.execute(

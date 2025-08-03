@@ -49,24 +49,19 @@ if _SETTINGS.dev_mode:
 else:
     _LOGGER.setLevel(logging.INFO)
 
-_ORIGINS: list[str]
-if _SETTINGS.dev_mode:
-    _ORIGINS = [
+_ORIGINS: list[str] = (
+    [
         f"{_SETTINGS.frontend_dev_url}",
         f"{_SETTINGS.frontend_dev_url_2}",
-        f"http://localhost:{_SETTINGS.dev_port}",
-        f"http://127.0.0.1:{_SETTINGS.dev_port}",
     ]
-else:
-    _ORIGINS = [
+    if _SETTINGS.dev_mode
+    else [
         f"{_SETTINGS.frontend_prod_url}",
-        f"http://localhost:{_SETTINGS.prod_port}",
-        f"http://127.0.0.1:{_SETTINGS.prod_port}",
     ]
+)
 
 _CLIENT = AsyncClient(timeout=20)
 _BACKGROUND_TASKS: set[asyncio.Task[None]] = set()
-DEFAULT_MAX_AGE_SECONDS = 60 * 60  # 1 hour
 
 
 @asynccontextmanager
@@ -81,6 +76,12 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
         )
     )
     yield
+    await expire.remove_all_keys(
+        _SETTINGS.openrouter_base_url,
+        _SETTINGS.openrouter_prov_api_key.get_secret_value(),
+        _CLIENT,
+        _LOGGER,
+    )
     await _CLIENT.aclose()
     _BACKGROUND_TASKS.clear()
 
@@ -90,9 +91,9 @@ app = FastAPI(lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_credentials=False,
+    allow_methods=["GET"],
+    allow_headers=["Authorization", "Content-Type", "Accept"],
 )
 
 
@@ -106,13 +107,13 @@ async def verify_token(
     else:
         token = request.headers.get("Authorization")
         if not token:
-            raise HTTPException(status_code=403, detail="Missing token")
+            raise HTTPException(status_code=401, detail="Missing token")
         token = token.removeprefix("Bearer ")
         is_valid = await cloudflare.is_token_valid(
             token, _SETTINGS.Audience.get_secret_value(), _SETTINGS.team_domain, _CLIENT
         )
     if not is_valid:
-        raise HTTPException(status_code=403, detail="Invalid token")
+        raise HTTPException(status_code=401, detail="Invalid token")
     return await call_next(request)
 
 
@@ -153,11 +154,7 @@ async def get_session_key() -> OpenRouterSession:
             datetime.datetime.fromtimestamp(expire_at, tz=datetime.UTC)
             - datetime.datetime.now(tz=datetime.UTC)
         ).total_seconds()
-        max_age = (
-            math.floor(delta)
-            if (delta < DEFAULT_MAX_AGE_SECONDS)
-            else DEFAULT_MAX_AGE_SECONDS
-        )
+        max_age = math.floor(delta)
         return OpenRouterSession(key=api_key, max_age=max_age)
     raise HTTPException(500, "Failed to retrieve the API key.")
 
@@ -174,12 +171,16 @@ async def get_openrouter_expense() -> OpenRouterExpense:
         "Authorization": f"Bearer {_SETTINGS.openrouter_prov_api_key.get_secret_value()}",
         "Content-Type": "application/json",
     }
-    response = await _CLIENT.get(url, headers=headers)
-    data = response.json()
-    return OpenRouterExpense(
-        usage=data["data"]["total_usage"],
-        total=data["data"]["total_credits"],
-    )
+    try:
+        response = await _CLIENT.get(url, headers=headers)
+        data = response.json()
+        return OpenRouterExpense(
+            usage=data["data"]["total_usage"],
+            total=data["data"]["total_credits"],
+        )
+    except Exception:
+        _LOGGER.exception("Failed to retrieve the current expense from OpenRouter: ")
+    raise HTTPException(500, "Failed to retrieve the current expense from OpenRouter")
 
 
 if __name__ == "__main__":
