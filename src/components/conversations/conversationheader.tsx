@@ -13,7 +13,7 @@ export function ConversationHeader() {
             .then((conversationId) => {
                 void navigate(`/${conversationId.toString()}`);
             })
-            .catch((error: unknown) => {
+            .catch((_: unknown) => {
                 toast.error("Failed to create a new conversation");
             });
     }, [navigate]);
