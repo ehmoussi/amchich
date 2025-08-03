@@ -1,7 +1,5 @@
 import asyncio
-import datetime
 import logging
-import math
 import sys
 import uuid
 from collections.abc import AsyncGenerator, Awaitable, Callable
@@ -9,7 +7,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from httpx import AsyncClient
@@ -61,29 +59,30 @@ _ORIGINS: list[str] = (
 )
 
 _CLIENT = AsyncClient(timeout=20)
-_BACKGROUND_TASKS: set[asyncio.Task[None]] = set()
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
     await db.create_db_and_tables()
-    _BACKGROUND_TASKS.add(
-        await expire.remove_expired_keys(
-            _SETTINGS.openrouter_base_url,
-            _SETTINGS.openrouter_prov_api_key.get_secret_value(),
-            _CLIENT,
-            _LOGGER,
-        )
-    )
-    yield
     await expire.remove_all_keys(
         _SETTINGS.openrouter_base_url,
         _SETTINGS.openrouter_prov_api_key.get_secret_value(),
         _CLIENT,
         _LOGGER,
     )
-    await _CLIENT.aclose()
-    _BACKGROUND_TASKS.clear()
+    try:
+        yield
+    finally:
+        try:
+            _LOGGER.info("Remove all the keys in the database")
+            await expire.remove_all_keys(
+                _SETTINGS.openrouter_base_url,
+                _SETTINGS.openrouter_prov_api_key.get_secret_value(),
+                _CLIENT,
+                _LOGGER,
+            )
+        finally:
+            await _CLIENT.aclose()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -122,38 +121,71 @@ class OpenRouterSession(BaseModel):
     max_age: float
 
 
-async def _get_openrouter_api_key() -> tuple[bytes | None, float | None]:
+class OpenRouterSessionResponseData(BaseModel):
+    name: str
+    label: str
+    limit: float | None
+    disabled: bool
+    created_at: str
+    updated_at: str | None
+    hash: str
+
+
+class OpenRouterSessionResponse(BaseModel):
+    key: SecretStr
+    data: OpenRouterSessionResponseData
+
+
+async def _get_openrouter_api_key() -> tuple[bytes | None, str | None, float | None]:
     url = f"{_SETTINGS.openrouter_base_url}keys"
-    api_id = uuid.uuid4()
+    api_id = str(uuid.uuid4())
     headers = {
         "Authorization": f"Bearer {_SETTINGS.openrouter_prov_api_key.get_secret_value()}",
         "Content-Type": "application/json",
     }
-    payload: dict[str, Any] = {"name": str(api_id), "include_byok_in_limit": True}
-    response = await _CLIENT.post(url, headers=headers, json=payload)
-    data = response.json()
-    if "key" in data and "data" in data and "hash" in data["data"]:
-        api_key = data["key"]
+    payload: dict[str, Any] = {"name": api_id, "include_byok_in_limit": True}
+    try:
+        response = await _CLIENT.post(url, headers=headers, json=payload)
+        response_json = response.json()
+        data = OpenRouterSessionResponse(**response_json)
+        api_hash = data.data.hash
         encrypted_api_key = encrypt.encrypt_api_key(
-            api_key, _SETTINGS.openrouter_key_salt.get_secret_value()
+            data.key.get_secret_value(),
+            _SETTINGS.openrouter_key_salt.get_secret_value(),
         )
-        expire_at = await db.add_created_key(
-            str(api_id), encrypted_api_key, str(data["data"]["hash"])
-        )
-        return encrypted_api_key, expire_at
-    return None, None
+        expire_at = await db.add_created_key(api_id, encrypted_api_key, api_hash)
+    except Exception:
+        _LOGGER.exception("Failed to create the API key")
+        return None, None, None
+    else:
+        return encrypted_api_key, api_hash, expire_at
+
+
+async def remove_session_key(api_hash: str, delay: int) -> None:
+    """Remove the session api key after the given delay in seconds"""
+    await asyncio.sleep(delay)
+    await expire.remove_key(
+        api_hash,
+        _SETTINGS.openrouter_base_url,
+        _SETTINGS.openrouter_prov_api_key.get_secret_value(),
+        _CLIENT,
+        _LOGGER,
+    )
 
 
 @app.get("/api/v1/openrouter/session")
-async def get_session_key() -> OpenRouterSession:
+async def get_session_key(background_tasks: BackgroundTasks) -> OpenRouterSession:
+    api_hash: str | None = None
     api_key, expire_at = await db.get_available_key()
     max_age = expire.compute_max_age_session(api_key, expire_at)
     if api_key is None or max_age is None:
-        api_key, expire_at = await _get_openrouter_api_key()
+        api_key, api_hash, expire_at = await _get_openrouter_api_key()
         max_age = expire.compute_max_age_session(api_key, expire_at)
-    if api_key is not None and max_age is not None:
-        return OpenRouterSession(key=api_key, max_age=max_age)
-    raise HTTPException(500, "Failed to retrieve the API key.")
+    if api_key is None or max_age is None:
+        raise HTTPException(500, "Failed to retrieve the API key.")
+    if api_hash is not None:
+        background_tasks.add_task(remove_session_key, api_hash, max_age)
+    return OpenRouterSession(key=api_key, max_age=max_age)
 
 
 class OpenRouterExpense(BaseModel):

@@ -38,31 +38,37 @@ async def get_available_key(offset: float = 120) -> tuple[bytes | None, float | 
         )
         row = await cursor.fetchone()
         if row is not None:
-            return bytes(row[0]), float(row[1])
+            return bytes(row[0]), float(row[2])
     return None, None
 
 
 async def get_expired_keys() -> list[str]:
-    async with aiosqlite.connect(DB_PATH) as conn, conn.execute(
-        """--sql
+    async with (
+        aiosqlite.connect(DB_PATH) as conn,
+        conn.execute(
+            """--sql
             SELECT api_hash
             FROM openrouter_key
             WHERE expire_at <= :current_date
             """,
-        {"current_date": datetime.datetime.now(tz=datetime.UTC).timestamp()},
-    ) as cursor:
+            {"current_date": datetime.datetime.now(tz=datetime.UTC).timestamp()},
+        ) as cursor,
+    ):
         return [str(api_hash) async for api_hash, *_ in cursor]
     return []
 
 
 async def get_all_keys() -> list[str]:
     """Get the api hash of all the keys stored in the database."""
-    async with aiosqlite.connect(DB_PATH) as conn, conn.execute(
-        """--sql
+    async with (
+        aiosqlite.connect(DB_PATH) as conn,
+        conn.execute(
+            """--sql
         SELECT api_hash
         FROM openrouter_key
         """
-    ) as cursor:
+        ) as cursor,
+    ):
         return [str(api_hash) async for api_hash, *_ in cursor]
     return []
 
@@ -104,14 +110,20 @@ async def delete_key(api_hash: str) -> None:
 
 
 async def get_current_keys() -> list[tuple[str, datetime.datetime]]:
-    async with aiosqlite.connect(DB_PATH) as conn, conn.execute(
-        """--sql
+    async with (
+        aiosqlite.connect(DB_PATH) as conn,
+        conn.execute(
+            """--sql
         SELECT api_hash, expire_at
         FROM openrouter_key
         """
-    ) as cursor:
+        ) as cursor,
+    ):
         return [
-            (str(api_hash), datetime.datetime.fromtimestamp(float(expire_at)))
+            (
+                str(api_hash),
+                datetime.datetime.fromtimestamp(float(expire_at), tz=datetime.UTC),
+            )
             async for api_hash, expire_at in cursor
         ]
     return []
