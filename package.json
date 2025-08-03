@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently 'pnpm run dev:frontend' 'pnpm run dev:backend'",
-    "dev:backend": "cd server2 && uv run main.py",
+    "dev:backend": "cd server2 && uv run python -m app.main",
     "dev:frontend": "vite",
     "tbuild": "tsc -b",
     "build": "tsc -b && vite build",

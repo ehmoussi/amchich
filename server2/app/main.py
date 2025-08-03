@@ -14,10 +14,7 @@ from httpx import AsyncClient
 from pydantic import BaseModel, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-import cloudflare
-import db
-import encrypt
-import expire
+from app import cloudflare, db, encrypt, expire
 
 
 class Settings(BaseSettings):
@@ -214,11 +211,8 @@ async def get_openrouter_expense() -> OpenRouterExpense:
 
 if __name__ == "__main__":
     log_level = "debug" if _SETTINGS.dev_mode else "info"
+    do_reload = bool(_SETTINGS.dev_mode)
     port = _SETTINGS.dev_port if _SETTINGS.dev_mode else _SETTINGS.prod_port
     uvicorn.run(
-        "main:app",
-        workers=2,
-        port=port,
-        log_level=log_level,
-        reload=bool(_SETTINGS.dev_mode),
+        "app.main:app", workers=2, port=port, log_level=log_level, reload=do_reload
     )
