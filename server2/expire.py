@@ -1,13 +1,29 @@
 """Manage the expiration of the API keys."""
 
 import asyncio
+import datetime
 import logging
+import math
 
 import httpx
 
 import db
 
 _REPEAT_CHECK_EXPIRATION_EVERY_SECONDS = 1 * 60  # 1 minute
+_OFFSET_MAX_AGE_SESSION = 60  # 1 minute
+
+
+def compute_max_age_session(
+    api_key: bytes | None, expire_at: float | None
+) -> int | None:
+    if api_key is not None and expire_at is not None:
+        delta = (
+            datetime.datetime.fromtimestamp(expire_at, tz=datetime.UTC)
+            - datetime.datetime.now(tz=datetime.UTC)
+        ).total_seconds()
+        if delta > _OFFSET_MAX_AGE_SESSION:
+            return math.floor(delta)
+    return None
 
 
 async def remove_all_keys(

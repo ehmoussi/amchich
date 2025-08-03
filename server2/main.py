@@ -147,14 +147,11 @@ async def _get_openrouter_api_key() -> tuple[bytes | None, float | None]:
 @app.get("/api/v1/openrouter/session")
 async def get_session_key() -> OpenRouterSession:
     api_key, expire_at = await db.get_available_key()
-    if api_key is None or expire_at is None:
+    max_age = expire.compute_max_age_session(api_key, expire_at)
+    if api_key is None or max_age is None:
         api_key, expire_at = await _get_openrouter_api_key()
-    if api_key is not None and expire_at is not None:
-        delta = (
-            datetime.datetime.fromtimestamp(expire_at, tz=datetime.UTC)
-            - datetime.datetime.now(tz=datetime.UTC)
-        ).total_seconds()
-        max_age = math.floor(delta)
+        max_age = expire.compute_max_age_session(api_key, expire_at)
+    if api_key is not None and max_age is not None:
         return OpenRouterSession(key=api_key, max_age=max_age)
     raise HTTPException(500, "Failed to retrieve the API key.")
 
