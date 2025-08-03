@@ -3,6 +3,7 @@ import { createMessage, deleteStreamingMessage, updateStreamingMessage, type Con
 import { handleAsyncError } from "./utils";
 import type { WorkerStreamingMessage } from "./worker";
 import { decryptApiKey } from "./decrypt"
+import { getCloudflareToken } from "./cloudflaretoken";
 
 interface WorkerState {
     worker: Worker;
@@ -209,9 +210,13 @@ export class WorkerPool {
     }
 
     private async fetchAPIKey(): Promise<{ key: string, hash: string, max_age: number }> {
+        const token = getCloudflareToken();
         const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/v1/openrouter/session`, {
             method: "GET",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+            },
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         const data = await response.json();
@@ -223,9 +228,13 @@ export class WorkerPool {
 
     private async fetchRemoveAPIKey(): Promise<void> {
         if (this.apiHash !== undefined) {
+            const token = getCloudflareToken();
             const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/v1/openrouter/session/${this.apiHash}`, {
                 method: "DELETE",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
             });
             if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
