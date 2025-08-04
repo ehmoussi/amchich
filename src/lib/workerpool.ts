@@ -4,6 +4,7 @@ import { handleAsyncError } from "./utils";
 import type { WorkerStreamingMessage } from "./worker";
 import { decryptApiKey } from "./decrypt"
 import { getCloudflareToken } from "./cloudflaretoken";
+import { toast } from "sonner";
 
 interface WorkerState {
     worker: Worker;
@@ -170,6 +171,10 @@ export class WorkerPool {
     private handleMessage(workerState: WorkerState, event: MessageEvent<WorkerStreamingMessage>) {
         if (event.data.type === "finished") {
             this.cleanWorkerState(workerState);
+            if (event.data.error)
+                toast.error(
+                    "An error occured during the streaming of the conversation"
+                );
             this.processWaitingConversations(workerState).catch((error: unknown) => {
                 handleAsyncError(error, "Failed to process a waiting conversation");
             });

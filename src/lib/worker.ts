@@ -9,7 +9,7 @@ let controller: AbortController | undefined;
 
 export type WorkerStreamingMessage =
     | { type: "init", payload: { conversationId: ConversationID, maxTokens: number, apiKey: string } }
-    | { type: "finished" }
+    | { type: "finished", error: boolean }
     | { type: "abort" };
 
 
@@ -54,6 +54,7 @@ async function streamAnswer(conversationId: ConversationID, maxTokens: number, a
         });
     }
     // 4. Start the streaming of the assistant answer
+    let hasError = false;
     try {
         if (model.provider === "Ollama") {
             let bufferThinking = "";
@@ -92,6 +93,7 @@ async function streamAnswer(conversationId: ConversationID, maxTokens: number, a
                     bufferText = "";
                     await updateStreamingMessage(message);
                 }
+                hasError = chunk.error;
             }
             await incrementUsageCount(model.name);
         }
@@ -104,7 +106,7 @@ async function streamAnswer(conversationId: ConversationID, maxTokens: number, a
         else
             throw error;
     } finally {
-        if (message.content.text !== "") {
+        if (message.content.text !== "" || message.content.thinking) {
             // 5. Save in the db the answer and clean the streaming message
             await addAssistantMessageAndClean(message);
             await updateFilesContentOfMessages(filesContentByMessage);
@@ -118,7 +120,7 @@ async function streamAnswer(conversationId: ConversationID, maxTokens: number, a
             // 5. Clean the streaming message
             await deleteStreamingMessage(conversationId);
         }
-        self.postMessage({ type: "finished" });
+        self.postMessage({ type: "finished", error: hasError });
     }
 }
 
@@ -184,7 +186,13 @@ interface OpenRouterResponse {
     }[];
 }
 
-async function* fetchStreamingOpenRouterAnswer(messages: OpenRouterMessage[], model: LLMModel, maxTokens: number, apiKey: string, signal: AbortSignal): AsyncGenerator<{ text: string, thinking?: string, done: boolean }> {
+async function* fetchStreamingOpenRouterAnswer(
+    messages: OpenRouterMessage[],
+    model: LLMModel,
+    maxTokens: number,
+    apiKey: string,
+    signal: AbortSignal
+): AsyncGenerator<{ text: string, thinking?: string, done: boolean, error: boolean }> {
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -215,7 +223,7 @@ async function* fetchStreamingOpenRouterAnswer(messages: OpenRouterMessage[], mo
     while (true) {
         const { done, value } = await reader.read();
         if (done) {
-            yield { text: "", done: true };
+            yield { text: "", done: true, error: false };
             break;
         }
         buffer += decoder.decode(value, { stream: true });
@@ -227,12 +235,18 @@ async function* fetchStreamingOpenRouterAnswer(messages: OpenRouterMessage[], mo
             // Extract data
             if (line.startsWith("data: ")) {
                 const data = line.slice(6);
-                if (data === "[DONE]") yield { text: "", done: true };
+                if (data === "[DONE]") yield { text: "", done: true, error: false };
                 else {
                     try {
                         const chunk = JSON.parse(data) as OpenRouterResponse;
-                        yield { text: chunk.choices[0].delta.content, thinking: chunk.choices[0].delta.reasoning, done: false };
+                        yield {
+                            text: chunk.choices[0].delta.content,
+                            thinking: chunk.choices[0].delta.reasoning,
+                            done: false,
+                            error: false
+                        };
                     } catch (error: unknown) {
+                        yield { text: "", done: true, error: true };
                         console.error(error);
                     }
                 }
