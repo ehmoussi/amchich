@@ -6,14 +6,14 @@ import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMe
 
 
 export const MAX_TOKENS = ["1000", "2000", "3000", "4000", "5000", "6000", "7000", "8000", "9000", "10000", "11000", "12000", "13000", "15000"];
-
+export const DEFAULT_MAX_TOKENS = MAX_TOKENS[7];
 
 export const ChatFormOptions = React.memo(function () {
     const { conversationId } = useParams<{ conversationId: ConversationID }>();
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
 
-    const currentMaxTokens = searchParams.get("maxTokens") ?? MAX_TOKENS[1];
+    const currentMaxTokens = searchParams.get("maxTokens") ?? DEFAULT_MAX_TOKENS;
     return (
         <div className="flex items-end gap-2 p-3">
             <DropdownMenu>
