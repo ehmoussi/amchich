@@ -20,19 +20,15 @@ from app import cloudflare, db, encrypt, expire
 
 class Settings(BaseSettings):
     dev_mode: bool
-    prod_port: int
-    dev_port: int
-    frontend_prod_url: str
-    frontend_dev_url: str
-    frontend_dev_url_2: str
-    openrouter_api_key: SecretStr
+    port: int
+    frontend_url: str
     openrouter_prov_api_key: SecretStr
     openrouter_key_salt: SecretStr
     openrouter_base_url: str
     team_domain: str
     audience: SecretStr
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(env_file=(".env.dev", ".env.prod"), env_file_encoding="utf-8")
 
 
 _SETTINGS = Settings()  # pyright: ignore[reportCallIssue]
@@ -45,29 +41,20 @@ if _SETTINGS.dev_mode:
 else:
     _LOGGER.setLevel(logging.INFO)
 
-_ORIGINS: list[str] = (
-    [
-        f"{_SETTINGS.frontend_dev_url}",
-        f"{_SETTINGS.frontend_dev_url_2}",
-    ]
-    if _SETTINGS.dev_mode
-    else [
-        f"{_SETTINGS.frontend_prod_url}",
-    ]
-)
+_ORIGINS: list[str] =[_SETTINGS.frontend_url]
 
-_CLIENT: AsyncClient | None = None
+client: AsyncClient | None = None
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
-    global _CLIENT  # noqa: PLW0603
-    _CLIENT = AsyncClient(timeout=20)
+    global client  # noqa: PLW0603
+    client = AsyncClient(timeout=20)
     await db.create_db_and_tables()
     await expire.remove_all_keys(
         _SETTINGS.openrouter_base_url,
         _SETTINGS.openrouter_prov_api_key.get_secret_value(),
-        _CLIENT,
+        client,
         _LOGGER,
     )
     try:
@@ -78,11 +65,11 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
             await expire.remove_all_keys(
                 _SETTINGS.openrouter_base_url,
                 _SETTINGS.openrouter_prov_api_key.get_secret_value(),
-                _CLIENT,
+                client,
                 _LOGGER,
             )
         finally:
-            await _CLIENT.aclose()
+            await client.aclose()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -107,7 +94,7 @@ async def verify_token(
         or _SETTINGS.dev_mode
     ):
         is_valid = True
-    elif _CLIENT is None:
+    elif client is None:
         _LOGGER.error("The httpx client is not available. Can't validate the token.")
         raise HTTPException(status_code=500, detail="Can't validate the token")
     else:
@@ -116,7 +103,7 @@ async def verify_token(
             raise HTTPException(status_code=401, detail="Missing token")
         token = token.removeprefix("Bearer ")
         is_valid = await cloudflare.is_token_valid(
-            token, _SETTINGS.audience.get_secret_value(), _SETTINGS.team_domain, _CLIENT
+            token, _SETTINGS.audience.get_secret_value(), _SETTINGS.team_domain, client
         )
     if not is_valid:
         raise HTTPException(status_code=401, detail="Invalid token")
@@ -150,18 +137,18 @@ class OpenRouterSessionResponse(BaseModel):
 
 
 async def _get_openrouter_api_key() -> tuple[bytes | None, str | None, float | None]:
-    url = f"{_SETTINGS.openrouter_base_url}keys"
+    url = f"{_SETTINGS.openrouter_base_url}/keys"
     api_id = str(uuid.uuid4())
     headers = {
         "Authorization": f"Bearer {_SETTINGS.openrouter_prov_api_key.get_secret_value()}",
         "Content-Type": "application/json",
     }
     payload: dict[str, Any] = {"name": api_id, "include_byok_in_limit": True}
-    if _CLIENT is None:
+    if client is None:
         _LOGGER.error("The httpx client is not available. Can't get the api key.")
         raise HTTPException(status_code=500, detail="Can't get the api key")
     try:
-        response = await _CLIENT.post(url, headers=headers, json=payload)
+        response = await client.post(url, headers=headers, json=payload)
         response.raise_for_status()
         response_json = response.json()
     except (httpx.HTTPStatusError, httpx.RequestError):
@@ -187,14 +174,14 @@ async def _get_openrouter_api_key() -> tuple[bytes | None, str | None, float | N
 async def remove_session_key(api_hash: str, delay: int) -> None:
     """Remove the session api key after the given delay in seconds"""
     await asyncio.sleep(delay)
-    if _CLIENT is None:
+    if client is None:
         _LOGGER.error("The httpx client is not available. Can't remove the api key.")
     else:
         await expire.remove_key(
             api_hash,
             _SETTINGS.openrouter_base_url,
             _SETTINGS.openrouter_prov_api_key.get_secret_value(),
-            _CLIENT,
+            client,
             _LOGGER,
         )
 
@@ -217,7 +204,7 @@ async def get_session_key(background_tasks: BackgroundTasks) -> OpenRouterSessio
 
 @app.delete("/api/v1/openrouter/session/{api_hash}", status_code=204)
 async def delete_session_key(api_hash: str) -> None:
-    if _CLIENT is None:
+    if client is None:
         _LOGGER.error("The httpx client is not available. Can't delete the api key.")
         raise HTTPException(status_code=500, detail="Can't delete the api key")
     try:
@@ -225,7 +212,7 @@ async def delete_session_key(api_hash: str) -> None:
             api_hash,
             _SETTINGS.openrouter_base_url,
             _SETTINGS.openrouter_prov_api_key.get_secret_value(),
-            _CLIENT,
+            client,
             _LOGGER,
         )
     except Exception:
@@ -239,16 +226,17 @@ class OpenRouterExpense(BaseModel):
 
 @app.get("/api/v1/openrouter/expense")
 async def get_openrouter_expense() -> OpenRouterExpense:
-    url = f"{_SETTINGS.openrouter_base_url}credits"
+    url = f"{_SETTINGS.openrouter_base_url}/credits"
     headers = {
         "Authorization": f"Bearer {_SETTINGS.openrouter_prov_api_key.get_secret_value()}",
         "Content-Type": "application/json",
     }
-    if _CLIENT is None:
+    if client is None:
         _LOGGER.error("The httpx client is not available. Can't get the expense.")
         raise HTTPException(status_code=500, detail="Can't get the expense")
     try:
-        response = await _CLIENT.get(url, headers=headers)
+        response = await client.get(url, headers=headers)
+        response.raise_for_status()
         data = response.json()
         return OpenRouterExpense(
             usage=data["data"]["total_usage"],
@@ -261,11 +249,10 @@ async def get_openrouter_expense() -> OpenRouterExpense:
 
 if __name__ == "__main__":
     log_level = "debug" if _SETTINGS.dev_mode else "info"
-    port = _SETTINGS.dev_port if _SETTINGS.dev_mode else _SETTINGS.prod_port
     uvicorn.run(
         "app.main:app",
         workers=2,
-        port=port,
+        port=_SETTINGS.port,
         log_level=log_level,
         reload=_SETTINGS.dev_mode,
     )

@@ -42,9 +42,7 @@ async def remove_all_keys(
 ) -> None:
     expired_api_hashes = await db.get_all_keys()
     tasks = [
-        remove_key(
-            api_hash, openrouter_base_url, openrouter_prov_api_key, client, logger
-        )
+        remove_key(api_hash, openrouter_base_url, openrouter_prov_api_key, client, logger)
         for api_hash in expired_api_hashes
     ]
     await asyncio.gather(*tasks)
@@ -57,23 +55,28 @@ async def remove_key(
     client: httpx.AsyncClient,
     logger: logging.Logger,
 ) -> bool:
-    url = f"{openrouter_base_url}keys/{api_hash}"
+    url = f"{openrouter_base_url}/keys/{api_hash}"
     headers = {
         "Authorization": f"Bearer {openrouter_prov_api_key}",
         "Content-Type": "application/json",
     }
-    response = await client.delete(url, headers=headers)
-    data = response.json()
-    if "deleted" in data and bool(data["deleted"]):
-        await db.delete_key(api_hash)
-        logger.info("Successfully delete api: %s", api_hash)
-        return True
-    if (
-        "error" in data
-        and "message" in data["error"]
-        and data["error"]["message"] == "API key not found"
-    ):
-        await db.delete_key(api_hash)
-        logger.info("Successfully delete api in the db: %s", api_hash)
+    try:
+        response = await client.delete(url, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+    except httpx.HTTPStatusError:
+        pass
+    else:
+        if "deleted" in data and bool(data["deleted"]):
+            await db.delete_key(api_hash)
+            logger.info("Successfully delete api: %s", api_hash)
+            return True
+        if (
+            "error" in data
+            and "message" in data["error"]
+            and data["error"]["message"] == "API key not found"
+        ):
+            await db.delete_key(api_hash)
+            logger.info("Successfully delete api in the db: %s", api_hash)
     logger.info("Failed to delete api: %s", api_hash)
     return False

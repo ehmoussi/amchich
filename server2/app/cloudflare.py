@@ -28,7 +28,7 @@ async def get_cloudflare_keys(client: httpx.AsyncClient, team_domain: str) -> li
     body = response.json()
     if "keys" not in body:
         raise HTTPException(status_code=500, detail="Token validation failed unexpectedly")
-    return body["keys"]
+    return list(body["keys"])
 
 
 async def can_decode_token(token: str, keys: list[Any], audience: str) -> bool:
