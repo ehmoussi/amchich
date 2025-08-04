@@ -20,7 +20,7 @@ export class WorkerPool {
     private capacity = 3;
     private maxIdleWorkerTime = 10 * 60 * 1000;
     private cleanupInterval: NodeJS.Timeout | undefined;
-    private maxTokens = 2000;
+    private maxTokens = 8000;
     private encryptedApiKey: string | undefined;
     private apiKey: string | undefined;
     private apiHash: string | undefined;

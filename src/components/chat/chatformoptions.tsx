@@ -5,7 +5,7 @@ import { type ConversationID } from "../../lib/db";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "../ui/dropdown-menu";
 
 
-export const MAX_TOKENS = ["1000", "2000", "3000", "4000", "5000", "6000", "7000", "8000", "9000", "10000"];
+export const MAX_TOKENS = ["1000", "2000", "3000", "4000", "5000", "6000", "7000", "8000", "9000", "10000", "11000", "12000", "13000", "15000"];
 
 
 export const ChatFormOptions = React.memo(function () {
