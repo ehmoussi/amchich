@@ -28,10 +28,9 @@ export function AssistantMessage({ message }: { message: AMessage }) {
                 }
                 <ScrollBar orientation="horizontal" />
             </ScrollArea>
-            <div
-                className="flex gap-1 justify-start mt-1 opacity-70"
-                style={{ visibility: isHovering ? 'visible' : 'hidden' }}>
+            <div className="flex gap-1 justify-start mt-1 opacity-70" hidden={!isHovering}>
                 <CopyButton text={message.content.text} />
+                <span>{message.modelId}</span>
             </div>
         </div >
     );
@@ -39,7 +38,7 @@ export function AssistantMessage({ message }: { message: AMessage }) {
 
 
 const ThinkingMessage = React.memo(function ({ thinking }: { thinking: string }) {
-    const [isOpen, setIsOpen] = React.useState<boolean>(true);
+    const [isOpen, setIsOpen] = React.useState<boolean>(false);
 
     return (
         <Collapsible open={isOpen} onOpenChange={setIsOpen} className="opacity-60">

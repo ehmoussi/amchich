@@ -3,7 +3,7 @@ import { Check, Copy } from "lucide-react";
 import { handleAsyncError } from "@/lib/utils";
 
 
-export const CopyButton = React.memo(function ({ text }: { text: string }) {
+export const CopyButton = React.memo(function ({ text, ...props }: React.ComponentProps<"button"> & { text: string }) {
     const [isFinishedCopying, setIsFinishedCopying] = React.useState(false);
 
     // Clear the Finished copying after 1s
@@ -28,6 +28,7 @@ export const CopyButton = React.memo(function ({ text }: { text: string }) {
             }}
             className="p-1 rounded hover:bg-black/10"
             aria-label="Copy message"
+            {...props}
         >
             {
                 isFinishedCopying ?
