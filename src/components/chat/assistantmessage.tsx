@@ -5,10 +5,15 @@ import { MarkdownText } from "../ui/markdowntext";
 import React from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@radix-ui/react-collapsible";
 import { Button } from "../ui/button";
+import { CopyButton } from "./copybutton";
 
 export function AssistantMessage({ message }: { message: AMessage }) {
+    const [isHovering, setIsHovering] = React.useState<boolean>(false);
     return (
-        <div className="group flex flex-col">
+        <div className="group flex flex-col"
+            onMouseEnter={() => { setIsHovering(true) }}
+            onMouseLeave={() => { setIsHovering(false) }}
+        >
             <ScrollArea
                 className="max-w-[95%] rounded-md shadow-sm px-3 py-2 text-sm whitespace-pre-line self-start border-indigo-100 border text-black"
             >
@@ -23,6 +28,11 @@ export function AssistantMessage({ message }: { message: AMessage }) {
                 }
                 <ScrollBar orientation="horizontal" />
             </ScrollArea>
+            <div
+                className="flex gap-1 justify-start mt-1 opacity-70"
+                style={{ visibility: isHovering ? 'visible' : 'hidden' }}>
+                <CopyButton text={message.content.text} />
+            </div>
         </div >
     );
 }
