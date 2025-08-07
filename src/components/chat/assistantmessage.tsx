@@ -28,7 +28,7 @@ export function AssistantMessage({ message }: { message: AMessage }) {
                 }
                 <ScrollBar orientation="horizontal" />
             </ScrollArea>
-            <div className="flex gap-1 justify-start mt-1 opacity-70" hidden={!isHovering}>
+            <div className="flex gap-1 justify-start items-center mt-1 opacity-70 text-xs" hidden={!isHovering}>
                 <CopyButton text={message.content.text} />
                 <span>Model: {message.modelId}</span>
                 {
