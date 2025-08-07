@@ -21,7 +21,7 @@ from app import cloudflare, db, encrypt, expire
 class Settings(BaseSettings):
     dev_mode: bool
     port: int
-    frontend_url: str
+    frontend_urls: list[str]
     openrouter_prov_api_key: SecretStr
     openrouter_key_salt: SecretStr
     openrouter_base_url: str
@@ -41,7 +41,6 @@ if _SETTINGS.dev_mode:
 else:
     _LOGGER.setLevel(logging.INFO)
 
-_ORIGINS: list[str] =[_SETTINGS.frontend_url]
 
 client: AsyncClient | None = None
 
@@ -76,7 +75,7 @@ app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_ORIGINS,
+    allow_origins=_SETTINGS.frontend_urls,
     allow_credentials=False,
     allow_methods=["GET", "DELETE"],
     allow_headers=["Authorization", "Content-Type", "Accept"],
