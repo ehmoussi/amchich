@@ -30,7 +30,23 @@ export function AssistantMessage({ message }: { message: AMessage }) {
             </ScrollArea>
             <div className="flex gap-1 justify-start mt-1 opacity-70" hidden={!isHovering}>
                 <CopyButton text={message.content.text} />
-                <span>{message.modelId}</span>
+                <span>Model: {message.modelId}</span>
+                {
+                    message.openRouterInfos?.usage?.cost &&
+                    <span>| Cost: ${message.openRouterInfos.usage.cost}</span>
+                }
+                {
+                    message.openRouterInfos?.usage?.prompt_tokens &&
+                    <span>| Input Tokens: {message.openRouterInfos.usage?.prompt_tokens}</span>
+                }
+                {
+                    message.openRouterInfos?.usage?.completion_tokens &&
+                    <span>| Output Tokens: {message.openRouterInfos.usage.completion_tokens}</span>
+                }
+                {
+                    message.openRouterInfos?.usage?.reasoning_tokens &&
+                    <span>| Reasoning Tokens: {message.openRouterInfos.usage.reasoning_tokens}</span>
+                }
             </div>
         </div >
     );

@@ -93,6 +93,21 @@ async function streamAnswer(conversationId: ConversationID, maxTokens: number, a
                     bufferText = "";
                     await updateStreamingMessage(message);
                 }
+                if (chunk.openRouterId)
+                    message.openRouterInfos = { ...(message.openRouterInfos ?? {}), id: chunk.openRouterId };
+                if (chunk.usage) {
+                    const reasoning_tokens = chunk.usage.reasoning_tokens || chunk.usage.completion_tokens_details.reasoning_tokens;
+                    message.openRouterInfos = {
+                        ...(message.openRouterInfos ?? {}),
+                        usage: {
+                            cost: chunk.usage.cost,
+                            prompt_tokens: chunk.usage.prompt_tokens,
+                            completion_tokens: chunk.usage.completion_tokens,
+                            reasoning_tokens: reasoning_tokens,
+                            total_tokens: chunk.usage.total_tokens,
+                        },
+                    }
+                }
                 hasError = chunk.error;
             }
             await incrementUsageCount(model.name);
@@ -177,13 +192,43 @@ interface OpenRouterMessage {
     content: string;
 }
 
+
+interface OpenRouterUsage {
+    completion_tokens: number;
+    completion_tokens_details: {
+        reasoning_tokens: number;
+    };
+    reasoning_tokens: number;
+    cost: number;
+    cost_details: {
+        upstream_inference_cost: number | null;
+    };
+    is_byok: boolean;
+    prompt_tokens: number;
+    prompt_tokens_details: {
+        cached_tokens: number;
+    };
+    total_tokens: number;
+}
+
 interface OpenRouterResponse {
+    id: string | null;
     choices: {
         delta: {
             content: string;
             reasoning?: string;
         }
     }[];
+    usage?: OpenRouterUsage
+}
+
+interface OpenRouterAnswer {
+    text: string;
+    thinking?: string;
+    done: boolean;
+    error: boolean;
+    openRouterId?: string;
+    usage?: OpenRouterUsage
 }
 
 async function* fetchStreamingOpenRouterAnswer(
@@ -192,7 +237,7 @@ async function* fetchStreamingOpenRouterAnswer(
     maxTokens: number,
     apiKey: string,
     signal: AbortSignal
-): AsyncGenerator<{ text: string, thinking?: string, done: boolean, error: boolean }> {
+): AsyncGenerator<OpenRouterAnswer> {
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -239,12 +284,18 @@ async function* fetchStreamingOpenRouterAnswer(
                 else {
                     try {
                         const chunk = JSON.parse(data) as OpenRouterResponse;
-                        yield {
+                        let message: OpenRouterAnswer = {
                             text: chunk.choices[0].delta.content,
                             thinking: chunk.choices[0].delta.reasoning,
                             done: false,
-                            error: false
+                            error: false,
                         };
+                        if (chunk.id)
+                            message.openRouterId = chunk.id;
+                        if (chunk.usage) {
+                            message.usage = chunk.usage;
+                        }
+                        yield message;
                     } catch (error: unknown) {
                         yield { text: "", done: true, error: true };
                         console.error(error);
