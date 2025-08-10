@@ -3,7 +3,7 @@ import { Check, Copy } from "lucide-react";
 import { handleAsyncError } from "@/lib/utils";
 
 
-export const CopyButton = React.memo(function ({ text, ...props }: React.ComponentProps<"button"> & { text: string }) {
+export const CopyButton = React.memo(function ({ text, iconSize, ...props }: React.ComponentProps<"button"> & { text: string, iconSize: number }) {
     const [isFinishedCopying, setIsFinishedCopying] = React.useState(false);
 
     // Clear the Finished copying after 1s
@@ -32,8 +32,8 @@ export const CopyButton = React.memo(function ({ text, ...props }: React.Compone
         >
             {
                 isFinishedCopying ?
-                    <Check size={16} /> :
-                    <Copy size={16} />
+                    <Check size={iconSize} /> :
+                    <Copy size={iconSize} />
             }
         </button>
     );

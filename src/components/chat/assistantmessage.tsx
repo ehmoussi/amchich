@@ -6,17 +6,27 @@ import React from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@radix-ui/react-collapsible";
 import { Button } from "../ui/button";
 import { CopyButton } from "./copybutton";
+import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 export function AssistantMessage({ message }: { message: AMessage }) {
     const [isHovering, setIsHovering] = React.useState<boolean>(false);
+    const isMobile = useIsMobile();
+    const iconSize = isMobile ? 10 : 12;
+
     return (
         <div className="group flex flex-col"
             onMouseEnter={() => { setIsHovering(true) }}
             onMouseLeave={() => { setIsHovering(false) }}
         >
             <ScrollArea
-                className="max-w-[95%] rounded-md shadow-sm px-3 py-2 text-sm whitespace-pre-line self-start border-indigo-100 border text-black"
+                className={
+                    cn(
+                        "max-w-[95%] rounded-md shadow-sm px-3 py-2 text-sm whitespace-pre-line self-start",
+                        message.isError ? "border-red-100 border text-red-500" : "border-indigo-100 border text-black"
+                    )}
             >
+                <span>{message.isError}</span>
                 {
                     message.content.thinking &&
                     <ThinkingMessage thinking={message.content.thinking} />
@@ -29,28 +39,59 @@ export function AssistantMessage({ message }: { message: AMessage }) {
                 <ScrollBar orientation="horizontal" />
             </ScrollArea>
             <div className="flex gap-1 justify-start items-center mt-1 opacity-70 text-xs" hidden={!isHovering}>
-                <CopyButton text={message.content.text} />
-                <span>Model: {message.modelId}</span>
-                {
-                    message.openRouterInfos?.usage?.cost &&
-                    <span>| Cost: ${message.openRouterInfos.usage.cost}</span>
-                }
-                {
-                    message.openRouterInfos?.usage?.prompt_tokens &&
-                    <span>| Input Tokens: {message.openRouterInfos.usage?.prompt_tokens}</span>
-                }
-                {
-                    message.openRouterInfos?.usage?.completion_tokens &&
-                    <span>| Output Tokens: {message.openRouterInfos.usage.completion_tokens}</span>
-                }
-                {
-                    message.openRouterInfos?.usage?.reasoning_tokens &&
-                    <span>| Reasoning Tokens: {message.openRouterInfos.usage.reasoning_tokens}</span>
-                }
+                <CopyButton text={message.content.text} iconSize={iconSize} />
+                <AssistantMessageUsage message={message} />
             </div>
         </div >
     );
 }
+
+const AssistantMessageUsage = React.memo(function ({ message }: { message: AMessage }) {
+    const usage = message.openRouterInfos?.usage;
+    const isMobile = useIsMobile();
+    const modelName = isMobile ? message.modelId?.split("/")[1] : message.modelId;
+    return (
+        <>
+            {
+                isMobile ?
+                    <span>{modelName}</span> :
+                    <span>Model: {modelName}</span>
+            }
+            {
+                usage?.cost !== undefined &&
+                (
+                    isMobile ?
+                        <span>| ${usage.cost}</span> :
+                        <span>| Cost: ${usage.cost}</span>
+                )
+            }
+            {
+                usage?.prompt_tokens &&
+                (
+                    isMobile ?
+                        <span>| I: {usage.prompt_tokens}</span> :
+                        <span>| Input Tokens: {usage.prompt_tokens}</span>
+                )
+            }
+            {
+                usage?.completion_tokens &&
+                (
+                    isMobile ?
+                        <span>| O: {usage.completion_tokens}</span> :
+                        <span>| Output Tokens: {usage.completion_tokens}</span>
+                )
+            }
+            {
+                usage?.reasoning_tokens !== undefined &&
+                (
+                    isMobile ?
+                        <span>| R: {usage.reasoning_tokens}</span> :
+                        <span>| Reasoning Tokens: {usage.reasoning_tokens}</span>
+                )
+            }
+        </>
+    );
+});
 
 
 const ThinkingMessage = React.memo(function ({ thinking }: { thinking: string }) {

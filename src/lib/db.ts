@@ -47,6 +47,7 @@ export interface AssistantMessage extends BaseMessage {
     role: "assistant";
     modelId: LLMID | undefined;
     isActive: boolean;
+    isError: boolean;
     openRouterInfos: {
         id: string | null;
         usage?: {

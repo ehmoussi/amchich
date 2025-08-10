@@ -93,6 +93,7 @@ async function streamAnswer(conversationId: ConversationID, maxTokens: number, a
                     bufferText = "";
                     await updateStreamingMessage(message);
                 }
+                message.isError = chunk.isError;
                 if (chunk.openRouterId)
                     message.openRouterInfos = { ...(message.openRouterInfos ?? {}), id: chunk.openRouterId };
                 if (chunk.usage) {
@@ -226,7 +227,7 @@ interface OpenRouterAnswer {
     text: string;
     thinking?: string;
     done: boolean;
-    error: boolean;
+    isError: boolean;
     openRouterId?: string;
     usage?: OpenRouterUsage
 }
@@ -259,6 +260,11 @@ async function* fetchStreamingOpenRouterAnswer(
         }),
         signal,
     });
+    if (response.status !== 200) {
+        const data = await response.json();
+        yield { text: data.error ? data.error.message : "", done: true, isError: true };
+        return;
+    }
     const reader = response.body?.getReader();
     if (!reader) {
         throw new Error("Can't read the body of the answer");
@@ -268,7 +274,7 @@ async function* fetchStreamingOpenRouterAnswer(
     while (true) {
         const { done, value } = await reader.read();
         if (done) {
-            yield { text: "", done: true, error: false };
+            yield { text: "", done: true, isError: false };
             break;
         }
         buffer += decoder.decode(value, { stream: true });
@@ -280,7 +286,7 @@ async function* fetchStreamingOpenRouterAnswer(
             // Extract data
             if (line.startsWith("data: ")) {
                 const data = line.slice(6);
-                if (data === "[DONE]") yield { text: "", done: true, error: false };
+                if (data === "[DONE]") yield { text: "", done: true, isError: false };
                 else {
                     try {
                         const chunk = JSON.parse(data) as OpenRouterResponse;
@@ -288,7 +294,7 @@ async function* fetchStreamingOpenRouterAnswer(
                             text: chunk.choices[0].delta.content,
                             thinking: chunk.choices[0].delta.reasoning,
                             done: false,
-                            error: false,
+                            isError: false,
                         };
                         if (chunk.id)
                             message.openRouterId = chunk.id;
@@ -297,7 +303,6 @@ async function* fetchStreamingOpenRouterAnswer(
                         }
                         yield message;
                     } catch (error: unknown) {
-                        yield { text: "", done: true, error: true };
                         console.error(error);
                     }
                 }

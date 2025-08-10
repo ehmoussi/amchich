@@ -10,9 +10,15 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { handleAsyncError } from "@/lib/utils";
 import { ChatSelectFiles } from "./chatselectfiles";
 import { CopyButton } from "./copybutton";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 
-const EditingMessage = React.memo(function ({ message, setIsEditing }: { message: UMessage, setIsEditing: (isEditing: boolean) => void }) {
+interface EditingMessageProps {
+    message: UMessage;
+    setIsEditing: (isEditing: boolean) => void;
+}
+
+const EditingMessage = React.memo(function ({ message, setIsEditing }: EditingMessageProps) {
     const {
         text,
         setText,
@@ -75,6 +81,8 @@ const EditingMessage = React.memo(function ({ message, setIsEditing }: { message
 export const UserMessage = React.memo(function UserMessage({ message }: { message: UMessage }) {
     const [isHovering, setIsHovering] = React.useState<boolean>(false);
     const [isEditing, setIsEditing] = React.useState(false);
+    const isMobile = useIsMobile();
+    const iconSize = isMobile ? 10 : 12;
 
     const isStreaming = useLiveQuery(async (): Promise<boolean> => {
         return await isConversationStreaming(message.conversationId);
@@ -106,23 +114,23 @@ export const UserMessage = React.memo(function UserMessage({ message }: { messag
             <div
                 className="flex gap-1 justify-end mt-1 opacity-70"
                 style={{ visibility: isHovering ? 'visible' : 'hidden' }}>
-                <CopyButton text={message.content.text} />
+                <CopyButton text={message.content.text} iconSize={iconSize} />
                 <button
                     type="button"
                     onClick={() => { setIsEditing(true); }}
                     className="p-1 rounded hover:bg-black/10"
                     aria-label="Edit message"
                 >
-                    <Pencil size={16} />
+                    <Pencil size={iconSize} />
                 </button>
-                <MessagePagination message={message} />
+                <MessagePagination message={message} iconSize={iconSize} />
             </div>
         </div >
     );
 });
 
 
-const MessagePagination = React.memo(function ({ message }: { message: UMessage }) {
+const MessagePagination = React.memo(function ({ message, iconSize }: { message: UMessage, iconSize: number }) {
     const siblings = useLiveQuery(async () => {
         try {
             return await getSiblings(message);
@@ -160,24 +168,24 @@ const MessagePagination = React.memo(function ({ message }: { message: UMessage 
     const isNextDisabled = currentPage >= (siblings.length - 1);
 
     return (
-        <>
+        <div className="flex items-center">
             <button
                 type="button"
                 disabled={isPreviousDisabled}
                 onClick={moveToPreviousMessage}
                 className={`p-1 rounded ${isPreviousDisabled ? "opacity-50 cursor-not-allowed" : "hover:bg-black/10"}`}
                 aria-label="Previous message">
-                <ChevronLeft size={16} />
+                <ChevronLeft size={iconSize} />
             </button>
-            <span>{currentPage + 1} / {nbPages}</span>
+            <span className="text-xs">{currentPage + 1} / {nbPages}</span>
             <button
                 type="button"
                 disabled={isNextDisabled}
                 onClick={moveToNextMessage}
                 className={`p-1 rounded ${isNextDisabled ? "opacity-50 cursor-not-allowed" : "hover:bg-black/10"}`}
                 aria-label="Next message">
-                <ChevronRight size={16} />
+                <ChevronRight size={iconSize} />
             </button >
-        </>
+        </div>
     );
 });
