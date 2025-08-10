@@ -24,7 +24,7 @@ export async function getToken(signal?: AbortSignal): Promise<string | null> {
             if (token !== null) {
                 // Store the token in a cookie
                 const maxAge = 60 * 60; // 1h
-                setAmchichCookie(import.meta.env.VITE_AMCHCICH_AUTH_COOKIE, token, maxAge)
+                setAmchichCookie(import.meta.env.VITE_AMCHICH_AUTH_COOKIE, token, maxAge)
             }
         }
     }
@@ -42,7 +42,7 @@ export function getCloudflareToken(): string | null {
 
 export function getAmchichCookie(): string | null {
     const cookies = document.cookie.split(';');
-    const amchichAuthCookie = cookies.find(cookie => cookie.trim().startsWith(`${import.meta.env.VITE_AMCHCICH_AUTH_COOKIE}=`));
+    const amchichAuthCookie = cookies.find(cookie => cookie.trim().startsWith(`${import.meta.env.VITE_AMCHICH_AUTH_COOKIE}=`));
     if (amchichAuthCookie) return amchichAuthCookie.split("=")[1];
     return null;
 }
