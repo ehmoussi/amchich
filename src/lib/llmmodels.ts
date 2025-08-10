@@ -1,4 +1,4 @@
-import { getCloudflareToken } from "./cloudflaretoken";
+import { getToken } from "./tokenutils";
 import { createModel, setModels, type LLMID, type LLMModel } from "./db";
 
 
@@ -49,13 +49,14 @@ async function fetchOpenRouterModels(signal: AbortSignal): Promise<LLMID[]> {
 }
 
 
-export async function getOpenRouterExpense(): Promise<{ usage: number, total: number }> {
-    const token = getCloudflareToken();
+export async function getOpenRouterExpense(signal: AbortSignal): Promise<{ usage: number, total: number }> {
+    const token = await getToken(signal);
     const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/v1/openrouter/expense`, {
         method: "GET",
         headers: {
             Authorization: `Bearer ${token}`,
         },
+        signal,
     });
     return await response.json();
 }

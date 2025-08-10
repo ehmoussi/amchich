@@ -12,18 +12,18 @@ export function Expense({ className }: { className?: string }) {
     const [openRouterSpent, setOpenRouterSpent] = React.useState<OpenRouterSpent | undefined>(undefined);
 
     React.useEffect(() => {
-        let isMounted = true;
+        const controller = new AbortController();
 
-        getOpenRouterExpense()
+        getOpenRouterExpense(controller.signal)
             .then((value) => {
-                if (isMounted)
-                    setOpenRouterSpent(value);
+                setOpenRouterSpent(value);
             })
-            .catch((error: unknown) => {
-                handleAsyncError(error, "Can't retrieve the amount spent in the OpenRouter provider");
+            .catch((error: any) => {
+                if (error?.name !== "AbortError")
+                    handleAsyncError(error, "Can't retrieve the amount spent in the OpenRouter provider");
             });
 
-        return () => { isMounted = false; }
+        return () => { controller.abort(); }
     }, []);
 
     return (

@@ -3,7 +3,7 @@ import { createMessage, deleteStreamingMessage, updateStreamingMessage, type Con
 import { handleAsyncError } from "./utils";
 import type { WorkerStreamingMessage } from "./worker";
 import { decryptApiKey } from "./decrypt"
-import { getCloudflareToken } from "./cloudflaretoken";
+import { getToken } from "./tokenutils";
 import { toast } from "sonner";
 
 interface WorkerState {
@@ -215,7 +215,7 @@ export class WorkerPool {
     }
 
     private async fetchAPIKey(): Promise<{ key: string, hash: string, max_age: number }> {
-        const token = getCloudflareToken();
+        const token = await getToken();
         const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/v1/openrouter/session`, {
             method: "GET",
             headers: {
@@ -233,7 +233,7 @@ export class WorkerPool {
 
     private async fetchRemoveAPIKey(): Promise<void> {
         if (this.apiHash !== undefined) {
-            const token = getCloudflareToken();
+            const token = await getToken();
             const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/v1/openrouter/session/${this.apiHash}`, {
                 method: "DELETE",
                 headers: {

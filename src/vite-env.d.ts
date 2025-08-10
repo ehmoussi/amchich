@@ -9,6 +9,7 @@ interface ViteTypeOptions {
 interface ImportMetaEnv {
     readonly VITE_BACKEND_URL: string
     readonly VITE_OPENROUTER_KEY_SALT: string
+    readonly VITE_AMCHCICH_AUTH_COOKIE: string
 }
 
 interface ImportMeta {

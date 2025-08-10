@@ -21,6 +21,7 @@ dependencies = [
 dev = [
     "mypy>=1.16.0",
     "ruff>=0.11.13",
+    "types-pyjwt>=1.7.1",
 ]
 [tool.ruff]
 line-length = 95

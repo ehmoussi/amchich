@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import logging
 import sys
 import uuid
@@ -12,24 +13,15 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from httpx import AsyncClient
-from pydantic import BaseModel, SecretStr
-from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from app import cloudflare, db, encrypt, expire
-
-
-class Settings(BaseSettings):
-    dev_mode: bool
-    port: int
-    frontend_urls: list[str]
-    openrouter_prov_api_key: SecretStr
-    openrouter_key_salt: SecretStr
-    openrouter_base_url: str
-    team_domain: str
-    audience: SecretStr
-
-    model_config = SettingsConfigDict(env_file=(".env.dev", ".env.prod"), env_file_encoding="utf-8")
-
+from app import db, encrypt, expire, tokenutils
+from app.models import (
+    OpenRouterExpense,
+    OpenRouterSession,
+    OpenRouterSessionResponse,
+    Settings,
+    Token,
+)
 
 _SETTINGS = Settings()  # pyright: ignore[reportCallIssue]
 
@@ -88,22 +80,24 @@ async def verify_token(
 ) -> Response:
     is_valid = False
     if (
-        (request.url.path in ("/api/v1/health", "/favicon.ico") and request.method == "GET")
-        or request.method == "OPTIONS"
-        or _SETTINGS.dev_mode
-    ):
+        request.url.path in ("/api/v1/health", "/favicon.ico") and request.method == "GET"
+    ) or request.method == "OPTIONS":
         is_valid = True
-    elif client is None:
-        _LOGGER.error("The httpx client is not available. Can't validate the token.")
-        raise HTTPException(status_code=500, detail="Can't validate the token")
+    elif request.url.path == "/api/v1/refresh":
+        if _SETTINGS.dev_mode:
+            is_valid = True
+        else:
+            try:
+                is_valid = await tokenutils.check_cloudflare_token(
+                    request, client, _SETTINGS, _LOGGER
+                )
+            except ValueError as e:
+                raise HTTPException(status_code=401, detail=str(e)) from None
     else:
-        token = request.headers.get("Authorization")
-        if not token:
-            raise HTTPException(status_code=401, detail="Missing token")
-        token = token.removeprefix("Bearer ")
-        is_valid = await cloudflare.is_token_valid(
-            token, _SETTINGS.audience.get_secret_value(), _SETTINGS.team_domain, client
-        )
+        try:
+            is_valid = tokenutils.check_token(request, _SETTINGS)
+        except ValueError as e:
+            raise HTTPException(status_code=401, detail=str(e)) from None
     if not is_valid:
         raise HTTPException(status_code=401, detail="Invalid token")
     return await call_next(request)
@@ -114,25 +108,15 @@ def check_health() -> str:
     return "Hello"
 
 
-class OpenRouterSession(BaseModel):
-    key: bytes
-    hash: str
-    max_age: float
-
-
-class OpenRouterSessionResponseData(BaseModel):
-    name: str
-    label: str
-    limit: float | None
-    disabled: bool
-    created_at: str
-    updated_at: str | None
-    hash: str
-
-
-class OpenRouterSessionResponse(BaseModel):
-    key: SecretStr
-    data: OpenRouterSessionResponseData
+@app.get("/api/v1/refresh")
+async def get_token(request: Request) -> Token:
+    if request.client is None:
+        raise HTTPException(status_code=401, detail="Missing client information")
+    token = tokenutils.create_token(
+        datetime.timedelta(hours=_SETTINGS.token_delay_hours),
+        _SETTINGS,
+    )
+    return Token(token=token)
 
 
 async def _get_openrouter_api_key() -> tuple[bytes | None, str | None, float | None]:
@@ -216,11 +200,6 @@ async def delete_session_key(api_hash: str) -> None:
         )
     except Exception:
         _LOGGER.exception("Failed to remove the key: %s", api_hash)
-
-
-class OpenRouterExpense(BaseModel):
-    usage: float
-    total: float
 
 
 @app.get("/api/v1/openrouter/expense")
