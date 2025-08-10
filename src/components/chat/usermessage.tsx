@@ -104,7 +104,7 @@ export const UserMessage = React.memo(function UserMessage({ message }: { messag
             <div
                 className="max-w-[95%] rounded-lg px-3 py-2 text-sm whitespace-pre-line self-end border border-neutral-500 bg-sidebar text-black"
             >
-                <MarkdownText>{message.content.text}</MarkdownText>
+                <MarkdownText iconSize={iconSize}>{message.content.text}</MarkdownText>
                 {message.content.files.metadata.length > 0 &&
                     <div className="flex-1">
                         <ChatFileTags selectedFiles={message.content.files.metadata} />

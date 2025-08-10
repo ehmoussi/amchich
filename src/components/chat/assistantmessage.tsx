@@ -33,7 +33,7 @@ export function AssistantMessage({ message }: { message: AMessage }) {
                 }
                 {
                     message.content.text ?
-                        <MarkdownText>{message.content.text}</MarkdownText> :
+                        <MarkdownText iconSize={iconSize}>{message.content.text}</MarkdownText> :
                         <div className="flex px-3"><Loader className="animate-spin" /><span>Processing...</span></div>
                 }
                 <ScrollBar orientation="horizontal" />

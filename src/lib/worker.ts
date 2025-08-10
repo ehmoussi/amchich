@@ -109,7 +109,7 @@ async function streamAnswer(conversationId: ConversationID, maxTokens: number, a
                         },
                     }
                 }
-                hasError = chunk.error;
+                hasError = chunk.isError;
             }
             await incrementUsageCount(model.name);
         }
