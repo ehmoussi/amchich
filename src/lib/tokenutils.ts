@@ -4,7 +4,7 @@ export async function getToken(signal?: AbortSignal): Promise<string | null> {
         let authorization: { Authorization?: string } = {}
         if (import.meta.env.PROD) {
             const cloudflareToken = getCloudflareToken();
-            if (cloudflareToken !== null) return null;
+            if (cloudflareToken === null) return null;
             authorization["Authorization"] = `Bearer ${cloudflareToken}`;
         }
         const response = await fetch(
