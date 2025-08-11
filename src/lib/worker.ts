@@ -262,7 +262,13 @@ async function* fetchStreamingOpenRouterAnswer(
     });
     if (response.status !== 200) {
         const data = await response.json();
-        yield { text: data.error ? data.error.message : "", done: true, isError: true };
+        let text = "";
+        if (data.error) {
+            text = data.error ? data.error.message : "";
+            if (data.error.metadata && data.error.metadata.raw)
+                text += ":\n" + data.error.metadata.raw + "\n";
+        }
+        yield { text, done: true, isError: true };
         return;
     }
     const reader = response.body?.getReader();
