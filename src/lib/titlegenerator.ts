@@ -2,7 +2,7 @@ import type { LLMModel, Message } from "./db";
 
 export async function generateTitle(messages: Message[], model: LLMModel, apiKey: string): Promise<string | undefined> {
     const prompt = buildTitlePrompt(messages);
-    if (model.provider === "OpenAI" || model.provider === "OpenRouter") {
+    if (model.provider === "OpenRouter") {
         return await generateWithOpenRouter(prompt, apiKey);
     } else {
         return await generateWithOllama(prompt);
