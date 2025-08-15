@@ -5,7 +5,7 @@ import sys
 import uuid
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
 import uvicorn
@@ -16,6 +16,8 @@ from httpx import AsyncClient
 
 from app import db, encrypt, expire, tokenutils
 from app.models import (
+    Inbox,
+    LastEvent,
     OpenRouterExpense,
     OpenRouterSession,
     OpenRouterSessionResponse,
@@ -23,6 +25,8 @@ from app.models import (
     Token,
 )
 
+if TYPE_CHECKING:
+    from pydantic import UUID7
 _SETTINGS = Settings()  # pyright: ignore[reportCallIssue]
 
 _LOGGER = logging.getLogger("amchich")
@@ -223,6 +227,14 @@ async def get_openrouter_expense() -> OpenRouterExpense:
     except Exception:
         _LOGGER.exception("Failed to retrieve the current expense from OpenRouter: ")
     raise HTTPException(500, "Failed to retrieve the current expense from OpenRouter")
+
+
+@app.post("/api/v1/events")
+async def save_events(events: list[Inbox]) -> LastEvent:
+    last_event_id: UUID7 | None = None
+    if len(events) > 0:
+        last_event_id = await db.add_events(events)
+    return LastEvent(lastEventId=last_event_id)
 
 
 if __name__ == "__main__":

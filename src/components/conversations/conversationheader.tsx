@@ -2,8 +2,8 @@ import { SquarePen } from "lucide-react";
 import { SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "../ui/sidebar";
 import React from "react";
 import { createConversation } from "@/lib/db";
-import { toast } from "sonner";
 import { useNavigate } from "react-router";
+import { handleAsyncError } from "@/lib/utils";
 
 export function ConversationHeader() {
     const navigate = useNavigate();
@@ -13,8 +13,8 @@ export function ConversationHeader() {
             .then((conversationId) => {
                 void navigate(`/${conversationId.toString()}`);
             })
-            .catch((_: unknown) => {
-                toast.error("Failed to create a new conversation");
+            .catch((error: unknown) => {
+                handleAsyncError(error, "Failed to create a new conversation");
             });
     }, [navigate]);
 

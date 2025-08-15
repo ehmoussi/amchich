@@ -1,5 +1,6 @@
 import type { UUID } from "crypto";
 import { add, Dexie, type Table } from "dexie";
+import { getToken } from "./tokenutils";
 
 export type ConversationID = UUID;
 export type MessageID = UUID;
@@ -82,13 +83,33 @@ export interface LLMModel {
 }
 
 
+export type LastEventID = UUID;
+type DeviceID = UUID;
+type OutboxID = UUID;
+type OperationType = "insert" | "update" | "delete";
+type TableType = "conversation" | "message" | "streaming" | "models";
 
+interface Device {
+    deviceId: DeviceID;
+    lastEventId: LastEventID | undefined;
+}
+
+export interface Outbox {
+    id: OutboxID;
+    deviceId: DeviceID;
+    createdAt: Date;
+    op: OperationType;
+    table: TableType;
+    payload: any;
+}
 
 interface AmchichDB extends Dexie {
     conversations: Table<Conversation, ConversationID>;
     messages: Table<Message, MessageID>;
     streamingMessages: Table<AssistantMessage, MessageID>;
     models: Table<LLMModel, LLMID>;
+    outbox: Table<Outbox, OutboxID>;
+    device: Table<Device, DeviceID>;
 }
 
 const amchichDB = new Dexie("amchichDB") as AmchichDB;
@@ -100,6 +121,120 @@ amchichDB.version(1).stores({
     streamingMessages: "id, conversationId",
     models: "name, isActive, createdAt, provider, usageCount",
 });
+
+
+amchichDB.version(2).stores({
+    conversations: "id, createdAt, *firstMessageIds, lastMessageId",
+    messages: "id, conversationId, role, createdAt, isActive, previousMessageId, *nextMessageIds",
+    streamingMessages: "id, conversationId",
+    models: "name, isActive, createdAt, provider, usageCount",
+    outbox: "id, createdAt",
+    device: "deviceId",
+});
+
+amchichDB.use({
+    stack: "dbcore",
+    name: "NotifyBackendsOfEvents",
+    create(down) {
+        return {
+            ...down,
+            table(tableName) {
+                const t = down.table(tableName);
+                if (tableName !== "outbox") return t;
+                return {
+                    ...t,
+                    async mutate(req) {
+                        if (req.type !== "add")
+                            return t.mutate(req);
+                        const res = await t.mutate(req);
+                        if (res.numFailures === 0)
+                            updateBackendEvents();
+                        return res;
+                    }
+                };
+            }
+        };
+    }
+});
+
+async function getOrCreateDeviceId(): Promise<DeviceID> {
+    const id = (await amchichDB.device.toCollection().first())?.deviceId;
+    if (!id) {
+        const deviceId: DeviceID = crypto.randomUUID();
+        await amchichDB.transaction("rw", amchichDB.device, async () => {
+            await amchichDB.device.add({ deviceId, lastEventId: undefined });
+        });
+        return deviceId;
+    }
+    return id;
+}
+
+export async function updateLastEventId(lastEventId: UUID): Promise<void> {
+    await amchichDB.transaction("rw", amchichDB.device, async () => {
+        const deviceId = await getOrCreateDeviceId();
+        await amchichDB.device.update(deviceId, { lastEventId: lastEventId });
+    });
+}
+
+const currentDeviceId = await getOrCreateDeviceId();
+
+function newOutbox(op: OperationType, table: TableType, payload: any): Outbox {
+    return {
+        id: crypto.randomUUID(),
+        deviceId: currentDeviceId,
+        createdAt: new Date(),
+        op,
+        table,
+        payload
+    }
+}
+
+export async function getOutboxEvents(): Promise<Outbox[]> {
+    return await amchichDB.outbox.orderBy("createdAt").toArray();
+}
+
+
+export async function updateBackendEvents(): Promise<void> {
+    await amchichDB.transaction("rw", amchichDB.outbox, amchichDB.device, async () => {
+        const events = await getOutboxEvents();
+        console.log(events);
+        const token = await getToken();
+        if (!token) {
+            throw new Error("Failed to retrieve a token");
+        }
+        console.log("token ok");
+        const body = JSON.stringify(events);
+        const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/v1/events`,
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`
+                },
+                body,
+            },
+        );
+        const content = await response.json();
+        console.log(content);
+        if (!response.ok) {
+            throw new Error(`Synchronization failed with status ${response.status}:\n${content}`);
+        } else if (content.lastEventId !== undefined) {
+            console.log(content.lastEventId);
+            await updateLastEventId(content.lastEventId);
+            console.log("updateLastEventId");
+            const eventIds = events.map((e) => e.id);
+            await clearOutboxEvents(eventIds);
+            console.log("clearOutboxEvents");
+        }
+    });
+}
+
+export async function clearOutboxEvents(eventIds: OutboxID[]): Promise<void> {
+    await amchichDB.transaction("rw", amchichDB.outbox, async () => {
+        await amchichDB.outbox.bulkDelete(eventIds);
+    });
+}
+
 
 export function isUserMessage(message: Message): message is UserMessage {
     return message.role === "user";
@@ -131,22 +266,41 @@ export async function createConversation(isActive: boolean): Promise<Conversatio
     const firstMessageIds: MessageID[] = [];
     const lastMessageId = undefined;
     const conversation = { id, title, createdAt, isActive, firstMessageIds, lastMessageId };
-    await amchichDB.conversations.add(conversation);
+    await amchichDB.transaction("rw", amchichDB.conversations, amchichDB.outbox, async () => {
+        await amchichDB.conversations.add(conversation);
+        const payload = { id, title, createdAt };
+        const outbox = newOutbox("insert", "conversation", payload);
+        await amchichDB.outbox.add(outbox);
+    });
     return conversation.id;
 }
 
 
 export async function updateConversationTitle(conversationId: ConversationID, title: string): Promise<void> {
-    await amchichDB.transaction("rw", amchichDB.conversations, async () => {
+    await amchichDB.transaction("rw", amchichDB.conversations, amchichDB.outbox, async () => {
         await amchichDB.conversations.update(conversationId, { title: title });
+        const outbox = newOutbox("update", "conversation", { id: conversationId, title });
+        await amchichDB.outbox.add(outbox);
     });
 }
 
 
 export async function deleteConversation(conversationId: ConversationID) {
-    await amchichDB.transaction("rw", amchichDB.conversations, amchichDB.messages, async () => {
-        await amchichDB.messages.where("conversationId").equals(conversationId).delete();
+    await amchichDB.transaction("rw", amchichDB.conversations, amchichDB.messages, amchichDB.outbox, async () => {
+        // Extract messages of the conversion 
+        const collectionMessages = amchichDB.messages.where("conversationId").equals(conversationId);
+        const messageIds = (await collectionMessages.toArray()).map((m) => m.id);
+        // Delete messages
+        await collectionMessages.delete();
+        // Delete conversation
         await amchichDB.conversations.delete(conversationId);
+        // Outbox
+        const outbox = newOutbox("delete", "conversation", { id: conversationId });
+        await amchichDB.outbox.add(outbox);
+        messageIds.forEach(async (messageId) => {
+            const outbox = newOutbox("delete", "message", { id: messageId });
+            await amchichDB.outbox.add(outbox);
+        });
     });
 }
 
@@ -157,17 +311,24 @@ export async function isConversationStreaming(conversationId: ConversationID): P
 
 export async function addUserMessage(message: Message): Promise<void> {
     await amchichDB.transaction(
-        "rw", amchichDB.conversations, amchichDB.messages,
-        async () => { await addMessage(message); }
+        "rw", amchichDB.conversations, amchichDB.messages, amchichDB.outbox,
+        async () => {
+            await addMessage(message);
+        }
     );
 }
 
 export async function addAssistantMessageAndClean(message: Message): Promise<void> {
     await amchichDB.transaction(
-        "rw", amchichDB.conversations, amchichDB.messages, amchichDB.streamingMessages,
+        "rw", amchichDB.conversations, amchichDB.messages, amchichDB.streamingMessages, amchichDB.outbox,
         async () => {
             await addMessage(message);
-            await amchichDB.streamingMessages.where({ conversationId: message.conversationId }).delete();
+            const streamingMessagesCollection = amchichDB.streamingMessages.where({ conversationId: message.conversationId });
+            const streamingMessageIds = (await streamingMessagesCollection.toArray()).map((m) => m.id);
+            await streamingMessagesCollection.delete();
+            // Outbox
+            await amchichDB.outbox.add(newOutbox("insert", "message", message));
+            await amchichDB.outbox.bulkAdd(streamingMessageIds.map((mId) => newOutbox("delete", "streaming", { id: mId })));
         }
     );
 }
@@ -178,37 +339,54 @@ async function addMessage(message: Message): Promise<void> {
         throw new Error("Can't find the conversation associated to the given message");
     message.previousMessageId = conversation.lastMessageId;
     if (!conversation.lastMessageId) {
-        await amchichDB.conversations.update(
-            conversation.id,
-            {
-                firstMessageIds: [...conversation.firstMessageIds, message.id],
-                lastMessageId: message.id
-            }
-        );
+        const changes = {
+            firstMessageIds: [...conversation.firstMessageIds, message.id],
+            lastMessageId: message.id
+        };
+        await amchichDB.conversations.update(conversation.id, changes);
+        // Outbox
+        const payload = { id: message.conversationId, ...changes };
+        await amchichDB.outbox.add(newOutbox("update", "conversation", payload));
     } else {
         const previousMessage = await amchichDB.messages.get(conversation.lastMessageId);
         if (previousMessage) {
-            await amchichDB.messages.update(
-                conversation.lastMessageId,
-                { nextMessageIds: [...(previousMessage.nextMessageIds ?? []), message.id] }
-            );
+            const changes = { nextMessageIds: [...(previousMessage.nextMessageIds ?? []), message.id] };
+            await amchichDB.messages.update(conversation.lastMessageId, changes);
+            // Outbox
+            const payload = { id: conversation.lastMessageId, ...changes };
+            await amchichDB.outbox.add(newOutbox("update", "message", payload));
         }
-        await amchichDB.conversations.update(conversation.id, { lastMessageId: message.id });
+        const changes = { lastMessageId: message.id };
+        await amchichDB.conversations.update(conversation.id, changes);
+        // Outbox
+        const payload = { id: conversation.id, ...changes };
+        await amchichDB.outbox.add(newOutbox("update", "conversation", payload));
     }
     await amchichDB.messages.add(message);
+    // Outbox
+    await amchichDB.outbox.add(newOutbox("insert", "message", message));
 }
 
 export async function editUserMessage(message: UserMessage, newMessage: UserMessage): Promise<void> {
-    await amchichDB.transaction("rw", amchichDB.messages, amchichDB.conversations, async () => {
+    await amchichDB.transaction("rw", amchichDB.messages, amchichDB.conversations, amchichDB.outbox, async () => {
         newMessage.previousMessageId = message.previousMessageId;
         await amchichDB.messages.update(message.id, { isActive: false });
+        // Outbox
+        await amchichDB.outbox.add(newOutbox("update", "message", { id: message.id, isActive: false }));
         if (message.previousMessageId) {
             await amchichDB.messages.update(message.previousMessageId, { nextMessageIds: add([newMessage.id]) });
             await amchichDB.conversations.update(newMessage.conversationId, { lastMessageId: newMessage.id });
+            // Outbox
+            await amchichDB.outbox.add(newOutbox("update", "message", { id: message.previousMessageId, nextMessageIds: { add: newMessage.id } }));
+            await amchichDB.outbox.add(newOutbox("update", "conversation", { id: newMessage.conversationId, lastMessageId: newMessage.id }));
         } else {
             await amchichDB.conversations.update(newMessage.conversationId, { lastMessageId: newMessage.id, firstMessageIds: add([newMessage.id]) });
+            // Outbox
+            await amchichDB.outbox.add(newOutbox("update", "conversation", { id: newMessage.conversationId, lastMessageId: newMessage.id, firstMessageIds: { add: newMessage.id } }));
         }
         await amchichDB.messages.add(newMessage);
+        // Outbox
+        await amchichDB.outbox.add(newOutbox("insert", "message", newMessage));
     });
 }
 
@@ -235,9 +413,13 @@ export async function getSiblings(message: UserMessage): Promise<MessageID[]> {
 }
 
 export async function updateActiveMessage(oldActiveMessageId: MessageID, newActiveMessageId: MessageID): Promise<void> {
-    await amchichDB.transaction("rw", amchichDB.messages, amchichDB.conversations, async () => {
+    await amchichDB.transaction("rw", amchichDB.messages, amchichDB.conversations, amchichDB.outbox, async () => {
         await amchichDB.messages.update(oldActiveMessageId, { isActive: false });
+        // Outbox
+        await amchichDB.outbox.add(newOutbox("update", "message", { id: oldActiveMessageId, isActive: false }));
         await amchichDB.messages.update(newActiveMessageId, { isActive: true });
+        // Outbox
+        await amchichDB.outbox.add(newOutbox("update", "message", { id: newActiveMessageId, isActive: true }));
         const newActiveMessage = await amchichDB.messages.get(newActiveMessageId);
         let lastMessage = newActiveMessage;
         while (lastMessage !== undefined) {
@@ -252,19 +434,24 @@ export async function updateActiveMessage(oldActiveMessageId: MessageID, newActi
         }
         if (lastMessage) {
             await amchichDB.conversations.update(lastMessage.conversationId, { lastMessageId: lastMessage.id });
+            // Outbox
+            await amchichDB.outbox.add(newOutbox("update", "conversation", { id: lastMessage.conversationId, lastMessageId: lastMessage.id }));
         }
     });
 }
 
 export async function updateFilesContentOfMessages(filesContentByMessage: Map<MessageID, string>): Promise<void> {
-    await amchichDB.messages.bulkUpdate(
-        Array.from(filesContentByMessage.entries()).map(([messageId, filesContent]) => {
+    await amchichDB.transaction("rw", amchichDB.messages, amchichDB.outbox, async () => {
+        const keysAndChanges = Array.from(filesContentByMessage.entries()).map(([messageId, filesContent]) => {
             return {
                 key: messageId,
                 changes: { "content.files.content": filesContent }
             };
-        })
-    );
+        });
+        await amchichDB.messages.bulkUpdate(keysAndChanges);
+        // Outbox
+        await amchichDB.outbox.bulkAdd(keysAndChanges.map(({ key, changes }) => newOutbox("update", "message", { id: key, ...changes })));
+    });
 }
 
 export async function getConversationMessages(conversationId: ConversationID): Promise<Message[]> {
@@ -295,11 +482,19 @@ export async function getStreamingMessage(conversationId: ConversationID): Promi
 
 
 export async function updateStreamingMessage(message: AssistantMessage): Promise<void> {
-    await amchichDB.streamingMessages.put(message);
+    await amchichDB.transaction("rw", amchichDB.streamingMessages, amchichDB.outbox, async () => {
+        await amchichDB.streamingMessages.put(message);
+        // Outbox
+        await amchichDB.outbox.add(newOutbox("update", "streaming", message));
+    });
 }
 
 export async function deleteStreamingMessage(conversationId: ConversationID): Promise<void> {
-    await amchichDB.streamingMessages.where({ conversationId }).delete();
+    await amchichDB.transaction("rw", amchichDB.streamingMessages, amchichDB.outbox, async () => {
+        await amchichDB.streamingMessages.where({ conversationId }).delete();
+        // Outbox
+        await amchichDB.outbox.add(newOutbox("delete", "streaming", { conversationId }));
+    });
 }
 
 

@@ -1,9 +1,11 @@
 """Models of the app."""
 
 import datetime
+from typing import Any, Literal
 
-from pydantic import BaseModel, SecretStr
+from pydantic import UUID4, UUID7, BaseModel, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from uuid_utils.compat import UUID
 
 
 class Settings(BaseSettings):
@@ -56,3 +58,33 @@ class TokenPayload(BaseModel):
 
 class Token(BaseModel):
     token: bytes
+
+
+def validate_uuid(val: Any, version: Literal[1, 3, 4, 5, 6, 7, 8]) -> UUID:  # noqa: ANN401
+    if not isinstance(val, UUID):
+        msg = f"Expected a UUID, got {type(val)}"
+        raise TypeError(msg)
+    if val.version != version:
+        msg = f"Expected a UUID{version}, got UUID{val.version}"
+        raise ValueError(msg)
+    return val
+
+
+type LastEventID = UUID7
+type InboxID = UUID4
+type DeviceID = UUID4
+type OperationType = Literal["insert", "update", "delete"]
+type TableType = Literal["conversation", "message", "streaming", "models"]
+
+
+class Inbox(BaseModel):
+    id: InboxID
+    device_id: DeviceID = Field(alias="deviceId")
+    created_at: str = Field(alias="createdAt")
+    op: OperationType
+    table: TableType
+    payload: Any
+
+
+class LastEvent(BaseModel):
+    last_event_id: LastEventID | None = Field(alias="lastEventId")

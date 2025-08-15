@@ -8,10 +8,11 @@ import { ChatMessages } from "./components/chat/chatmessages"
 import { ModelSelector } from "./components/models/modelselector";
 import { Expense } from "./components/models/expense"
 import { useParams } from "react-router";
-import { getConversationMessages, getStreamingMessage, type ConversationID, type Message } from "./lib/db";
+import { clearOutboxEvents, getConversationMessages, getOutboxEvents, getStreamingMessage, updateLastEventId, type ConversationID, type Message } from "./lib/db";
 import { useLiveQuery } from "dexie-react-hooks";
 import { handleAsyncError } from "./lib/utils";
 import { useAutoScroll } from "./hooks/useautoscroll"
+import { getToken } from "./lib/tokenutils"
 
 export function AppConversation() {
     const { conversationId } = useParams<{ conversationId: ConversationID }>();
@@ -53,6 +54,48 @@ export function AppLandingPage() {
 
 
 function App({ children, ref, onScroll }: { children: React.ReactNode, ref?: React.RefObject<HTMLDivElement | null>, onScroll?: React.UIEventHandler<HTMLElement> }) {
+    // useLiveQuery(async (): Promise<void> => {
+    //     const events = await getOutboxEvents();
+    //     if (events.length === 0) return;
+
+    //     const controller = new AbortController();
+    //     try {
+    //         const token = await getToken(controller.signal);
+    //         if (token) {
+    //             const body = JSON.stringify(events);
+    //             const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/v1/events`,
+    //                 {
+    //                     method: "POST",
+    //                     headers: {
+    //                         "Content-Type": "application/json",
+    //                         Authorization: `Bearer ${token}`
+    //                     },
+    //                     signal: controller.signal,
+    //                     body,
+    //                 },
+    //             );
+    //             const content = await response.json();
+    //             console.log("content", content);
+    //             if (!response.ok) {
+    //                 throw new Error(`Synchronization failed with status ${response.status}:\n${content}`);
+    //             } else if (content.lastEventId !== undefined) {
+    //                 await updateLastEventId(content.lastEventId);
+    //             }
+    //             // Clear the events
+    //             await clearOutboxEvents();
+    //         }
+    //     } catch (error: any) {
+    //         if (error?.name !== "AbortError")
+    //             handleAsyncError(error, "Synchonization failed unexpectedly");
+    //     }
+    // }, []);
+
+    // React.useEffect(() => {
+    //     if (controllerRef.current)
+    //         controllerRef.current.abort();
+
+    //     return () => controller.abort();
+    // }, [events]);
     return (
         <SidebarProvider defaultOpen={true}>
             <ConversationSideBar />
